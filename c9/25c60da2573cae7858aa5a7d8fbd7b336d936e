@@ -1,0 +1,56 @@
+package.json
+  s_cdf1f30595ed11::t_601ffd65f3ba92 34-35
+  s_414c3936ff41fd::t_b16fc481abcc10 10
+src/browserExt/nativeHost.js
+  s_cdf1f30595ed11::t_0db587d9497151 1-210
+test/native/transport.test.ts
+  s_cdf1f30595ed11::t_ca828c41a542be 1-180
+src/common/connector.js
+  s_cdf1f30595ed11::t_cd82b47cc5a958 199-200,204,207
+scripts/build-win.ts
+  s_cdf1f30595ed11::t_74302bca09a2f0 1-200
+ZOTERO-NEXT.md
+  s_cdf1f30595ed11::t_d14643f3aa71d9 1-80
+bun.lock
+  s_cdf1f30595ed11::t_0afea7713576c2 1-1382
+extension-id.txt
+  s_cdf1f30595ed11::t_9fffeca0b31cd0 1
+extension-key.txt
+  s_cdf1f30595ed11::t_20523c508f6444 1
+gulpfile.js
+  s_cdf1f30595ed11::t_ad3adafdf91c59 122
+scripts/gen-key.ts
+  s_cdf1f30595ed11::t_f3496e952c5ca9 1-15
+scripts/run-gulp-task.cjs
+  s_cdf1f30595ed11::t_7b5584585e4d3c 1-13
+src/browserExt/manifest-v3.json
+  s_cdf1f30595ed11::t_0a82e65a8e513b 2,17
+src/common/zotero.js
+  s_cdf1f30595ed11::t_a7c7ce9c01428a 347
+src/common/zotero_config.js
+  s_cdf1f30595ed11::t_acc2e10732356f 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c925c60da2573cae7858aa5a7d8fbd7b336d936e",
+  "prompts": {},
+  "sessions": {
+    "s_414c3936ff41fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ab76cd48c3aa5e968",
+        "model": "unknown"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    },
+    "s_cdf1f30595ed11": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0719cea7-1eb3-4344-a1e4-a862c3bde6eb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
