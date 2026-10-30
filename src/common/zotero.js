@@ -344,7 +344,7 @@ Zotero.Prefs = new function() {
 		"interceptKnownFileTypes": true,
 		"allowedCSLExtensionHosts": ["^https://raw\\.githubusercontent\\.com/", "^https://gitee\\.com/.+/raw/"],
 		"allowedInterceptHosts": [],
-		"firstUse": true,
+		"firstUse": false, // zotero-next fork: no first-run "download Zotero" prompt
 		"firstSaveToServer": true,
 		"suppressAllHostsRecommendation": false,
 		"reportTranslationFailure": true,

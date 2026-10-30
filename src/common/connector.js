@@ -196,28 +196,15 @@ Zotero.Connector = new function() {
 		var timeout = "timeout" in options ? options.timeout : 15000;
 		var queryString = options.queryString ? ("?" + options.queryString) : "";
 		
-		var uri = Zotero.Prefs.get('connector.url') + "connector/" + method + queryString;
+		// zotero-next fork: native messaging to the zotero-next host instead of HTTP to 127.0.0.1:23119
+		// (see browserExt/nativeHost.js). A multipart body stays a plain object; the transport encodes it.
 		if (headers["Content-Type"] == 'application/json') {
 			data = JSON.stringify(data);
 		}
-		else if (headers["Content-Type"] == 'multipart/form-data') {
-			let formData = new FormData();
-			for (const entry in data) {
-				// For SingleFile binary arrays, convert them to blobs
-				if (entry.startsWith('binary-')) {
-					const int8array = new Uint8Array(Object.values(data[entry]));
-					formData.append(entry, new Blob([int8array]));
-				}
-				else {
-					formData.append(entry, data[entry]);
-				}
-			}
-			data = formData;
-		}
-		options = { body: data, headers, successCodes: false, timeout };
+		options = { body: data, headers, queryString, timeout };
 		let httpMethod = data === null ? "GET" : "POST";
 		try {
-			const xhr = await Zotero.HTTP.request(httpMethod, uri, options);
+			const xhr = await Zotero.NativeHost.request(httpMethod, method, options);
 			Zotero.Connector.clientVersion = xhr.getResponseHeader('X-Zotero-Version');
 			if (Zotero.Connector.isOnline !== true) {
 				Zotero.Connector.isOnline = true;

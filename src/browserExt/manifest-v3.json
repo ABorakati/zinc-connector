@@ -1,5 +1,5 @@
 {
-	"name": "Zotero Connector",
+	"name": "Zotero Next Connector",
 	"manifest_version": 3,
 	"version": "AUTOFILLED",
 	"description": "__MSG_extension_description__",
@@ -14,7 +14,7 @@
 	},
 	"host_permissions": ["http://127.0.0.1/*", "https://repo.zotero.org/*", "https://api.zotero.org/*", "http://*/*", "https://*/*"],
 	"permissions": ["tabs", "contextMenus", "cookies", "scripting", "offscreen",
-		"webRequest", "declarativeNetRequest", "webNavigation", "storage"],
+		"webRequest", "declarativeNetRequest", "webNavigation", "storage", "nativeMessaging"],
 	"declarative_net_request": {
 		"rule_resources": [{
 			"id": "styleIntercept",
@@ -31,23 +31,6 @@
 			"matches": ["http://*/*", "https://*/*"],
 			"run_at": "document_start",
 			"js": [/*INJECT SCRIPTS*/]
-		},
-		{
-			"matches": ["https://docs.google.com/document/*"],
-			"run_at": "document_start",
-			"js": [
-				"zotero-google-docs-integration/kixAddZoteroMenu.js"
-			]
-		},
-		{
-			"matches": ["https://docs.google.com/document/*"],
-			"run_at": "document_end",
-			"js": [
-				"zotero-google-docs-integration/googleDocs.js",
-				"zotero-google-docs-integration/client.js",
-				"zotero-google-docs-integration/clientAppsScript.js",
-				"zotero-google-docs-integration/document.js"
-			]
 		}
 	],
 	"sandbox": {

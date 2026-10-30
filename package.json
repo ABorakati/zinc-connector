@@ -7,6 +7,7 @@
     "@babel/plugin-proposal-object-rest-spread": "^7.8.3",
     "@babel/plugin-transform-react-jsx": "^7.8.3",
     "@babel/preset-react": "^7.8.3",
+    "@resvg/resvg-js": "^2.6.2",
     "@rollup/plugin-node-resolve": "16.0.3",
     "@rollup/plugin-terser": "0.4.4",
     "bluebird": "^3.5.3",
@@ -30,6 +31,8 @@
     "yargs": "^6.0.0"
   },
   "scripts": {
+    "build": "bun scripts/build-win.ts",
+    "test:native": "bun test test/native",
     "test": "mocha",
     "update-single-file": "scripts/update-single-file"
   }

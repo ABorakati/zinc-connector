@@ -119,6 +119,7 @@ var backgroundInclude = [
 	'oauthsimple.js',
 	'proxy.js',
 	'connector.js',
+	'nativeHost.js', // zotero-next fork: native-messaging transport
 	'updaterFix.js',
 	'repo.js',
 	'translate/debug.js',
