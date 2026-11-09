@@ -33,8 +33,10 @@
 
 Zotero.NativeHost = new function() {
 	const HOST_NAME = 'com.zotero_next.connector_host';
-	// Raw bytes per upload message. Chrome allows 64 MB per message to a host; base64 adds a third.
-	const UPLOAD_CHUNK = 4 * 1024 * 1024;
+	// Raw bytes per upload message. Chrome allows 64 MB per message to a host, but one port is one queue: a 20 MB
+	// PDF posted as one burst makes every other call (ping, a save in another tab) wait behind it. So big bodies go
+	// in small pieces, with a turn of the event loop between them for other calls to slip in.
+	const UPLOAD_CHUNK = 1024 * 1024;
 	// A string body up to this many characters goes in the request message itself (4 bytes/char < UPLOAD_CHUNK)
 	const INLINE_TEXT_CHARS = UPLOAD_CHUNK / 4;
 	// Extra time per MB uploaded on top of the call's own timeout, and the "no activity for this long" rule
@@ -235,9 +237,12 @@ Zotero.NativeHost = new function() {
 		});
 	}
 
-	function postUpload(thePort, uid, bytes) {
+	const yieldToEventLoop = () => new Promise(resolve => setTimeout(resolve, 0));
+
+	async function postUpload(thePort, uid, bytes) {
 		let chunks = Math.max(1, Math.ceil(bytes.length / UPLOAD_CHUNK));
 		for (let i = 0; i < chunks; i++) {
+			if (i > 0) await yieldToEventLoop();
 			thePort.postMessage({
 				t: 'up',
 				uid,
@@ -278,7 +283,7 @@ Zotero.NativeHost = new function() {
 					size += bytes.length;
 					if (proto >= 2) {
 						let uid = newUid();
-						postUpload(thePort, uid, bytes);
+						await postUpload(thePort, uid, bytes);
 						fields[name] = { upload: uid };
 					}
 					else {
@@ -290,7 +295,7 @@ Zotero.NativeHost = new function() {
 					size += text.length;
 					if (proto >= 2 && text.length > INLINE_TEXT_CHARS) {
 						let uid = newUid();
-						postUpload(thePort, uid, new TextEncoder().encode(text));
+						await postUpload(thePort, uid, new TextEncoder().encode(text));
 						fields[name] = { upload: uid, asText: true };
 					}
 					else {
@@ -308,7 +313,7 @@ Zotero.NativeHost = new function() {
 			? new TextEncoder().encode(body)
 			: (body instanceof ArrayBuffer ? new Uint8Array(body) : new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
 		let uid = newUid();
-		postUpload(connect(), uid, bytes);
+		await postUpload(connect(), uid, bytes);
 		return { wireBody: { kind: 'upload', uid }, size: bytes.length };
 	}
 

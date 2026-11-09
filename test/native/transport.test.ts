@@ -175,6 +175,39 @@ describe("extension transport against the real host", () => {
 		db.close(true);
 	});
 
+	test("a 20 MB PDF uploads in the background: the item is saved at once and other calls are not queued behind the upload", async () => {
+		const sessionID = "TS3";
+		const t0 = performance.now();
+		await Z().Connector.callMethod("saveItems", { sessionID, uri: "https://example.org/", items: [{ ...article, id: "item3", title: "Big PDF article", DOI: "10.1000/big", attachments: [] }] });
+		const itemSaved = performance.now() - t0;
+		const pdf = new Uint8Array(20 * 1024 * 1024).map((_, i) => (i * 11 + 5) & 0xff);
+		pdf.set(new TextEncoder().encode("%PDF-1.4\n"));
+		const t1 = performance.now();
+		let uploadDone = false;
+		const upload = Z().Connector.callMethod(
+			{
+				method: "saveAttachment",
+				headers: { "Content-Type": "application/pdf", "X-Metadata": JSON.stringify({ id: "att3", url: "https://example.org/big.pdf", contentType: "application/pdf", parentItemID: "item3", title: "Big PDF" }) },
+				queryString: `sessionID=${sessionID}`,
+			},
+			pdf.buffer,
+		).then(() => ((uploadDone = true), performance.now() - t1));
+		await Bun.sleep(5);
+		const t2 = performance.now();
+		// a second save and a ping while the PDF is still going up
+		const other = Z().Connector.callMethod("saveItems", { sessionID: "TS4", uri: "https://example.org/", items: [{ ...article, id: "item4", title: "Second article", DOI: "10.1000/second", attachments: [] }] }).then(() => performance.now() - t2);
+		const secondSaved = await other;
+		const uploadDoneWhenSecondSaved = uploadDone;
+		const attachmentSaved = await upload;
+		console.log(`item saved ${itemSaved.toFixed(0)} ms; second save during the upload ${secondSaved.toFixed(0)} ms; 20 MB attachment saved ${attachmentSaved.toFixed(0)} ms after it started`);
+		expect(secondSaved).toBeLessThan(attachmentSaved);
+		expect(uploadDoneWhenSecondSaved).toBe(false); // the second save came back before the upload finished
+		const db = new Database(dbPath, { readonly: true });
+		expect((db.query("SELECT COUNT(*) n FROM items WHERE title IN ('Big PDF article', 'Second article')").get() as any).n).toBe(2);
+		expect((db.query("SELECT COUNT(*) n FROM attachments a JOIN items i ON i.key = a.item_key JOIN items p ON p.key = i.parent_key WHERE p.title = 'Big PDF article'").get() as any).n).toBe(1);
+		db.close(true);
+	});
+
 	test("a dead host is reconnected on the next call", async () => {
 		const before = spawned;
 		lastPort.proc.kill();

@@ -237,14 +237,17 @@ ItemSaver.prototype = {
 		const shouldAttemptToDownloadOAAttachments = await Zotero.Connector.getPref('downloadAssociatedFiles')
 		for (let item of this._items) {
 			item.hasPrimaryAttachment = false;
-			for (let attachment of item.attachments) {
+			// zotero-next fork: the item is already in the library (and shown as saved); its attachments are fetched
+			// and uploaded side by side rather than one after the other, each with its own progress row. A failure
+			// leaves the item and the other attachments alone and shows on that attachment's row.
+			await Promise.all(item.attachments.map(async (attachment) => {
 				if (attachment.snapshot === false) {
 					attachmentCallback(attachment, 100);
-					continue;
+					return;
 				}
 
 				attachmentCallback(attachment, 0);
-				if (attachment.isOpenAccess) continue;
+				if (attachment.isOpenAccess) return;
 				try {
 					Zotero.debug(`ItemSaver.saveAttachmentsToZotero: Saving attachment ${attachment.url} of mimeType ${attachment.mimeType}`);
 					if (PRIMARY_ATTACHMENT_TYPES.has(attachment.mimeType)) {
@@ -254,7 +257,15 @@ ItemSaver.prototype = {
 					// Safari background page fetch doesn't send user's cookies, so we try to
 					// fetch the attachment in the content script
 					await ItemSaver.fetchAttachmentSafari(attachment);
-					await Zotero.ItemSaver.saveAttachmentToZotero(attachment, this._sessionID)
+					try {
+						await Zotero.ItemSaver.saveAttachmentToZotero(attachment, this._sessionID);
+					}
+					catch (e) {
+						// The library was busy and nothing was stored: once more is safe
+						if (e.status !== 503) throw e;
+						await new Promise(resolve => setTimeout(resolve, 500));
+						await Zotero.ItemSaver.saveAttachmentToZotero(attachment, this._sessionID);
+					}
 					if (attachment.isPrimary) {
 						item.hasPrimaryAttachment = true;
 					}
@@ -271,7 +282,7 @@ ItemSaver.prototype = {
 						Zotero.logError(e);
 					}
 				}
-			}
+			}));
 			if (!item.hasPrimaryAttachment) {
 				if (!shouldAttemptToDownloadOAAttachments) continue;
 				await this.saveAttachmentFromResolver(item, attachmentCallback);
