@@ -146,9 +146,33 @@ describe("extension transport against the real host", () => {
 		expect(err).toBeInstanceOf(Z().Connector.CommunicationError);
 		expect(err.status).toBe(400);
 		expect(err.value.error).toBe("SESSION_NOT_FOUND");
-		// translators are not served by the host: upstream's repo fallback catches this
-		const t = await Z().Connector.callMethod("getTranslators", {}).catch((e: any) => e);
-		expect(t.status).toBe(404);
+		// the host serves the translators bundled with Zinc (no repo.zotero.org round trip)
+		const t = await Z().Connector.callMethod("getTranslators", {});
+		expect(t.length).toBeGreaterThan(100);
+		const code = await Z().Connector.callMethod("getTranslatorCode", { translatorID: t[0].translatorID });
+		expect(code).toContain(t[0].translatorID);
+		// what the host does not implement (client integration) is a 404
+		const doc = await Z().Connector.callMethod("document/getActiveDocument", {}).catch((e: any) => e);
+		expect(doc.status).toBe(404);
+	});
+
+	test("a multipart form with a big snapshot goes as upload frames and is saved", async () => {
+		const sessionID = "TS2";
+		await Z().Connector.callMethod("saveItems", { sessionID, uri: "https://example.org/", items: [{ ...article, id: "item2", title: "Form article", DOI: "10.1000/form", attachments: [] }] });
+		const snapshotContent = "<html><body>" + "form snapshot ".repeat(200_000) + "</body></html>"; // 2.8M chars
+		const posted: string[] = [];
+		const realPost = lastPort.postMessage.bind(lastPort);
+		lastPort.postMessage = (m: any) => (posted.push(m.t), realPost(m));
+		await Z().Connector.callMethod(
+			{ method: "saveSingleFile", headers: { "Content-Type": "multipart/form-data" } },
+			{ sessionID, items: JSON.stringify([{ id: "item2" }]), url: "https://example.org/a", title: "Snapshot", snapshotContent },
+		);
+		expect(posted.filter((t) => t === "up").length).toBeGreaterThan(0);
+		const db = new Database(dbPath, { readonly: true });
+		const top = db.query("SELECT key FROM items WHERE title = 'Form article'").get() as { key: string };
+		const att = db.query("SELECT path FROM attachments a JOIN items i ON i.key = a.item_key WHERE i.parent_key = ? AND a.content_type = 'text/html'").get(top.key) as { path: string };
+		expect(readFileSync(att.path, "utf8")).toBe(snapshotContent);
+		db.close(true);
 	});
 
 	test("a dead host is reconnected on the next call", async () => {
@@ -176,5 +200,132 @@ describe("extension transport against the real host", () => {
 		};
 		expect(await Z().Connector.checkIsOnline()).toBe(false);
 		g.chrome.runtime.connectNative = real;
+	});
+});
+
+
+// A port that behaves as scripted, to exercise the failure paths deterministically.
+function fakePort(onReq: (msg: any, port: any) => void, proto = 2) {
+	const listeners: ((m: any) => void)[] = [];
+	const disc: (() => void)[] = [];
+	const sent: any[] = [];
+	const port: any = {
+		sent,
+		reply: (m: any) => queueMicrotask(() => listeners.forEach((l) => l(m))),
+		crash: (message = "Native host has exited.") =>
+			queueMicrotask(() => {
+				(globalThis as any).chrome.runtime.lastError = { message };
+				disc.forEach((d) => d());
+			}),
+		postMessage(m: any) {
+			sent.push(m);
+			if (m.t === "hello") port.reply({ t: "hello", id: m.id, version: "t", proto });
+			else if (m.t === "req") onReq(m, port);
+		},
+		onMessage: { addListener: (l: (m: any) => void) => listeners.push(l) },
+		onDisconnect: { addListener: (l: () => void) => disc.push(l) },
+	};
+	return port;
+}
+const json = (id: number, status: number, body: unknown) => [
+	{ t: "res", id, status, headers: { "Content-Type": "application/json", "X-Zotero-Version": "7" }, n: 1 },
+	{ t: "rc", id, seq: 0, data: Buffer.from(JSON.stringify(body)).toString("base64") },
+];
+
+describe("extension transport: failure handling (scripted host)", () => {
+	let real: any;
+	beforeAll(async () => {
+		real = (globalThis as any).chrome.runtime.connectNative;
+		// close the real host's port first: the transport keeps one connection
+		lastPort.proc.kill();
+		await lastPort.proc.exited;
+		await Bun.sleep(50);
+	});
+	afterAll(() => {
+		(globalThis as any).chrome.runtime.connectNative = real;
+	});
+	let current: any = null;
+	const use = (...ports: any[]) => {
+		const rt = (globalThis as any).chrome.runtime;
+		let i = 0;
+		rt.connectNative = () => (current = ports[Math.min(i++, ports.length - 1)]);
+		return () => i;
+	};
+	// every test starts from a closed port (the transport keeps one connection open)
+	const reset = async () => {
+		const p = current;
+		current = null;
+		if (p) {
+			p.crash();
+			await Bun.sleep(5);
+		}
+	};
+
+	test("the host dying mid-save is a 502 HOST_CRASHED, not offline (status 0)", async () => {
+		await reset();
+		use(fakePort((_m, port) => port.crash()));
+		await Z().NativeHost.hello(); // the port has spoken: a later death is a crash
+		const err = await Z().NativeHost.request("POST", "saveItems", { body: "{}", headers: {} }).catch((e: any) => e);
+		expect(err.status).toBe(502);
+		expect(err.value.error).toBe("HOST_CRASHED");
+	});
+
+	test("a read-only call is retried once on a new connection after a crash", async () => {
+		await reset();
+		const first = fakePort((_m, port) => port.crash());
+		const second = fakePort((m, port) => json(m.id, 200, { ok: 1 }).forEach((x) => port.reply(x)));
+		const opened = use(first, second);
+		await Z().NativeHost.hello();
+		const xhr = await Z().NativeHost.request("POST", "getSelectedCollection", { body: "{}", headers: {} });
+		expect(xhr.status).toBe(200);
+		expect(opened()).toBe(2);
+	});
+
+	test("503 (library busy) is retried once for read-only calls, not for saves", async () => {
+		await reset();
+		let calls = 0;
+		use(fakePort((m, port) => json(m.id, ++calls === 1 ? 503 : 200, { error: "busy" }).forEach((x) => port.reply(x))));
+		const ok = await Z().NativeHost.request("POST", "getSelectedCollection", { body: "{}", headers: {} });
+		expect(ok.status).toBe(200);
+		expect(calls).toBe(2);
+		calls = 0;
+		const saved = await Z().NativeHost.request("POST", "saveItems", { body: "{}", headers: {} });
+		expect(saved.status).toBe(503);
+		expect(calls).toBe(1);
+	});
+
+	test("a timed-out upload is dropped on the host", async () => {
+		await reset();
+		const port = fakePort(() => {}); // never answers
+		use(port);
+		const err = await Z().NativeHost.request("POST", "saveAttachment", { body: new Uint8Array(1000).buffer, headers: {}, timeout: 60 }).catch((e: any) => e);
+		expect(err.status).toBe(0);
+		expect(err.message).toContain("timed out");
+		const up = port.sent.find((m: any) => m.t === "up");
+		expect(port.sent.some((m: any) => m.t === "drop" && m.uid === up.uid)).toBe(true);
+	});
+
+	test("the timeout restarts whenever the host shows life (a long response is not a timeout)", async () => {
+		await reset();
+		use(
+			fakePort((m, port) => {
+				const body = Buffer.from("x".repeat(30)).toString("base64");
+				port.reply({ t: "res", id: m.id, status: 200, headers: {}, n: 3 });
+				[0, 1, 2].forEach((seq, i) => setTimeout(() => port.reply({ t: "rc", id: m.id, seq, data: body }), 40 * (i + 1)));
+			}),
+		);
+		// 120 ms in total, but never more than 40 ms between messages
+		const xhr = await Z().NativeHost.request("POST", "saveItems", { body: "{}", headers: {}, timeout: 70 });
+		expect(xhr.responseText.length).toBe(90);
+	});
+
+	test("ping is answered from a short cache, concurrent pings share one call", async () => {
+		await reset();
+		let reqs = 0;
+		use(fakePort((m, port) => (reqs++, json(m.id, 200, { prefs: {} }).forEach((x) => port.reply(x)))));
+		const [a, b] = await Promise.all([Z().NativeHost.request("POST", "ping", { body: "{}", headers: {} }), Z().NativeHost.request("POST", "ping", { body: "{}", headers: {} })]);
+		await Z().NativeHost.request("POST", "ping", { body: "{}", headers: {} });
+		expect(a).toBe(b);
+		expect(reqs).toBe(1);
 	});
 });
