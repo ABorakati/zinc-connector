@@ -22,14 +22,27 @@ page ──translator──▶ extension ──native messaging──▶ zotero-
         (upstream)    nativeHost.js   4-byte-length JSON      core/src/connector/handlers.ts
 ```
 
-Uploads (PDF bytes, SingleFile HTML) are cut into 4 MiB chunks (Chrome allows 64 MB per message to a host);
-responses larger than the 1 MB host-to-browser limit come back as base64 chunks.
+Uploads (PDF bytes, SingleFile HTML, big multipart fields) are cut into 4 MiB chunks (Chrome allows 64 MB per message
+to a host); responses larger than the 1 MB host-to-browser limit come back as base64 chunks. Small JSON bodies go in
+the request message itself.
+
+**Translators** come from the host too: it answers `getTranslators` / `getTranslatorCode` from the translators bundled
+with Zinc (the app's `<library folder>/translators` when it has updated them, else `core/vendor/zotero/translators`),
+so page detection works offline and on first run, and the extension no longer downloads the repository index from
+repo.zotero.org. The extension re-asks every 24 h, so a translator update in the app reaches it within a day (or after
+"Reset translators" in the options).
+
+**Failures**: status 0 = the host cannot be started (not installed); 502 `HOST_CRASHED` = the host died with a call in
+flight (not "offline", so a save is never sent to zotero.org by mistake); 503 = the library is busy. Read-only calls
+are retried once after a reconnect. A timeout counts from the last sign of life and grows with the upload size;
+uploads left behind by a failed call are dropped (the host also expires them after 10 minutes). `ping` answers are
+reused for 5 s.
 
 ## What changed against upstream
 
 | File | Change |
 |---|---|
-| `src/browserExt/nativeHost.js` | **new**: the transport (`Zotero.NativeHost`) |
+| `src/browserExt/nativeHost.js` | **new**: the transport (`Zotero.NativeHost`): chunked uploads, retries, ping cache |
 | `src/common/connector.js` | `callMethod` calls `Zotero.NativeHost.request()` instead of `Zotero.HTTP.request()` (about 15 lines) |
 | `gulpfile.js` | one line: load `nativeHost.js` in the background worker |
 | `src/browserExt/manifest-v3.json` | name "Zotero Next Connector", `nativeMessaging` permission, Google Docs content scripts removed |
@@ -68,13 +81,13 @@ Uninstall: `uninstall.ps1`, then remove the extension.
 
 * Word / LibreOffice / Google Docs citation integration (`document/*`), which needs a running client; the Google Docs
   scripts are not injected. (zotero-next has its own Word add-in.)
-* Proxies (`getClientHostnames` answers an empty list), translator updates *from the client* (the extension
-  uses Zotero's translator repository instead, which it already does when the client cannot supply them),
-  "Save to zotero.org" is still in the code but is not what you want here.
+* Proxies (`getClientHostnames` answers an empty list). "Save to zotero.org" is still in the code but is not what
+  you want here.
 * Full-text indexing of saved PDFs happens when zotero-next next runs its indexer, not in the host.
 
 ## Merging upstream
 
-`git fetch upstream && git merge upstream/master` (shallow clone: `git fetch --unshallow upstream` first if history is
-needed). Conflicts, if any, are in `connector.js` `callMethod`, `manifest-v3.json` or `gulpfile.js`: the changes are
+Remotes: `origin` is upstream (`zotero/zotero-connectors`, default branch `main`, not `master`), `zn` is this fork
+(`ABorakati/zinc-connector`, branch `zotero-next`). On branch `zotero-next`: `git fetch origin && git merge origin/main`
+(shallow clone: `git fetch --unshallow origin` first if history is needed). Last merged: upstream `02271dc`. Conflicts, if any, are in `connector.js` `callMethod`, `manifest-v3.json` or `gulpfile.js`: the changes are
 isolated for that. Submodules (`src/zotero`, `src/translate`, ...) are untouched and shallow.
