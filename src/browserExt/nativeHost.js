@@ -68,7 +68,7 @@ Zotero.NativeHost = new function() {
 			if (thisPort === port) port = null;
 			// status 0 is what a dead HTTP connection gave upstream: callers treat it as "Zotero is offline"
 			failAll(new Zotero.Connector.CommunicationError(
-				`Zotero Next host is not available: ${message}`, 0));
+				`Zinc host is not available: ${message}`, 0));
 		});
 		return port;
 	}
@@ -127,7 +127,7 @@ Zotero.NativeHost = new function() {
 			if (timeout) {
 				p.timer = setTimeout(function () {
 					pending.delete(id);
-					reject(new Zotero.Connector.CommunicationError(`Zotero Next host request timed out after ${timeout} ms`, 0));
+					reject(new Zotero.Connector.CommunicationError(`Zinc host request timed out after ${timeout} ms`, 0));
 				}, timeout);
 			}
 			pending.set(id, p);
@@ -137,7 +137,7 @@ Zotero.NativeHost = new function() {
 			catch (e) {
 				clearTimeout(p.timer);
 				pending.delete(id);
-				reject(new Zotero.Connector.CommunicationError(`Zotero Next host is not available: ${e.message}`, 0));
+				reject(new Zotero.Connector.CommunicationError(`Zinc host is not available: ${e.message}`, 0));
 			}
 		});
 	}
