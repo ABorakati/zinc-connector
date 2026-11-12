@@ -1,0 +1,19 @@
+src/browserExt/offscreen/offscreen.js
+  s_e8244edae027cb::t_9521221139e6b5 67-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d63a11f80df024d882ed2fc2affaff5eb70e1566",
+  "prompts": {},
+  "sessions": {
+    "s_e8244edae027cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1dc5ae7-c6db-4d3a-83d0-ba9036d23ba9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
