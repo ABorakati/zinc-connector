@@ -14,6 +14,23 @@
 		<button class="icon-btn" id="open-library-top" title="Open library" aria-label="Open library"><i class="i i-library-big"></i></button>
 	</header>
 
+	<section class="target" id="target">
+		<span class="target-text">Saving to: <strong id="target-name">Zinc app</strong></span>
+		<button class="link" id="target-change" aria-haspopup="menu" aria-expanded="false" title="Change where saves go">Change</button>
+		<div class="target-menu" id="target-menu" role="menu" hidden>
+			<button class="target-opt" role="menuitemradio" data-target="app"><i class="i i-check"></i>Zinc app</button>
+			<button class="target-opt" role="menuitemradio" data-target="browser"><i class="i i-check"></i>This browser</button>
+		</div>
+	</section>
+
+	<section class="host-down" id="host-down" hidden>
+		<i class="i i-circle-alert"></i>
+		<div class="host-down-text">
+			<div>The Zinc app is not answering.</div>
+			<button class="btn" id="save-in-browser"><i class="i i-library-big"></i>Save to this browser instead</button>
+		</div>
+	</section>
+
 	<section class="status" id="status">
 		<i class="i status-icon" id="status-icon"></i>
 		<div class="status-text">

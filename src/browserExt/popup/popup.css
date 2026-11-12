@@ -171,6 +171,24 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .search input:focus-visible { outline: none; }
 .chooser:focus-within { border-color: var(--primary-line); }
 
+/* where saves go (Zinc app / this browser) */
+.target { position: relative; display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; font-size: 12px; color: var(--muted-foreground); }
+.target strong { font-weight: 600; color: var(--foreground); }
+.target-text { min-width: 0; }
+.link { border: 0; background: none; padding: 2px 4px; border-radius: var(--r-md); color: var(--primary); cursor: pointer; font-size: 12px; }
+.link:hover { background: var(--primary-soft); }
+.target-menu {
+	position: absolute; z-index: 2; top: 100%; left: 0; margin-top: 2px; min-width: 160px; padding: 4px;
+	background: var(--popover); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+.target-opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r-md); background: none; color: var(--foreground); text-align: left; cursor: pointer; }
+.target-opt:hover { background: var(--accent); }
+.target-opt .i { width: 14px; height: 14px; visibility: hidden; color: var(--primary); }
+.target-opt[aria-checked="true"] .i { visibility: visible; }
+.host-down { display: flex; gap: 10px; margin: 0 12px 8px; padding: 10px 12px; border-radius: var(--r-lg); background: var(--danger-soft); }
+.host-down > .i { margin-top: 1px; color: var(--danger); }
+.host-down-text { display: grid; gap: 8px; justify-items: start; }
+
 /* footer */
 .foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 12px 10px; border-top: 1px solid var(--border-soft); min-height: 46px; }
 .message { font-size: 12px; color: var(--muted-foreground); min-width: 0; }

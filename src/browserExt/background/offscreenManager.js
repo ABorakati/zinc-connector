@@ -40,8 +40,8 @@ Zotero.OffscreenManager = {
 			// Create offscreen document
 			await browser.offscreen.createDocument({
 				url: this.offscreenUrl,
-				reasons: ['DOM_PARSER'],
-				justification: 'Running Zotero Translators in isolated frames',
+				reasons: ['DOM_PARSER', 'WORKERS'], // zotero-next fork: also hosts the browser library (nativeHost.js, offscreen.js)
+				justification: 'Running Zotero Translators in isolated frames, and the Zinc library database',
 			});
 		}
 		else {

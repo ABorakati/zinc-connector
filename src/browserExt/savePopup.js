@@ -15,6 +15,11 @@
 	  Cancel / Remove         cancelSession / trashSession: the session's own items go to the Trash (never deleted)
 	  Open in Zinc / item     revealInApp {key, open}
 	  Open library            the library page (library/library.html) with the item selected
+
+	Browser library: a save goes to the Zinc app or to the library in this browser (Zotero.NativeHost.getSaveTarget).
+	The state carries `library` ("app" | "browser", where this save goes) so the popup can say so, and `hostDown` (the app
+	is the target but its host does not answer): the popup then offers "Save to this browser instead" for this save only
+	(cmd saveToBrowserOnce), and a small control changes the target for good (cmd setSaveTarget).
 */
 
 Zotero.SavePopup = new function () {
@@ -49,7 +54,44 @@ Zotero.SavePopup = new function () {
 			busy: null, // 'cancel' | 'remove' | 'target' while a host call runs
 			message: null, // last action's result for the popup's status line
 			seenDone: false,
+			library: 'app', // where this save goes: 'app' | 'browser'
+			viaBrowser: false, // sent to the browser once ("Save to this browser instead"), the setting is 'app'
+			hostDown: false, // the target is the app and its host does not answer
 		};
+	}
+
+	/** Fills in where the save goes, and whether the app's host answers. */
+	async function checkLibrary(s) {
+		try {
+			const target = await Zotero.NativeHost.getSaveTarget();
+			s.library = s.viaBrowser ? 'browser' : target;
+			s.hostDown = false;
+			push(s.tabId);
+			if (s.library == 'app') {
+				s.hostDown = !(await Zotero.NativeHost.isHostReachable());
+			}
+		}
+		catch (e) {
+			Zotero.debug(`SavePopup: save target check failed: ${e.message}`);
+		}
+		push(s.tabId);
+	}
+
+	/** Starts a save in the tab: what a click on the toolbar button does. */
+	async function startSave(tab, fresh) {
+		try {
+			await Zotero.Connector_Browser.onZoteroButtonElementClick(tab);
+		}
+		catch (e) {
+			fresh.errors.push(e.message);
+		}
+		setTimeout(() => {
+			if (states.get(tab.id) === fresh && fresh.starting) {
+				fresh.starting = false;
+				fresh.nothing = true;
+				push(tab.id);
+			}
+		}, NOTHING_AFTER_MS);
 	}
 
 	function push(tabId) {
@@ -169,7 +211,13 @@ Zotero.SavePopup = new function () {
 					s = newState(tabId, sessionID);
 					// a Cancel pressed while the popup was still waiting for the page
 					if (prev && !prev.sessionID && prev.cancelled) s.cancelled = true;
+					if (prev && !prev.sessionID && prev.viaBrowser) {
+						s.viaBrowser = true;
+						s.library = 'browser';
+					}
 					states.set(tabId, s);
+					if (s.viaBrowser && sessionID) Zotero.NativeHost.routeSessionToBrowser(sessionID);
+					checkLibrary(s);
 					s.owned = await claim(tab);
 					loadTargets(s);
 					if (s.cancelled) cancelOnHost(s);
@@ -206,6 +254,8 @@ Zotero.SavePopup = new function () {
 				if (!s) return false;
 				const rv = Array.isArray(args) ? args : [args];
 				s.done = { ok: !!rv[0], error: rv[0] ? null : (rv[1] || 'translationError') };
+				if (s.viaBrowser) Zotero.NativeHost.endSaveOnce();
+				else if (!rv[0] && s.library == 'app') checkLibrary(s);
 				refreshSaved(s);
 				break;
 			}
@@ -272,25 +322,46 @@ Zotero.SavePopup = new function () {
 				fresh.owned = true;
 				states.set(tab.id, fresh);
 				push(tab.id);
+				checkLibrary(fresh);
 				if (msg.save === false) {
 					fresh.starting = false;
 					fresh.nothing = true;
 					push(tab.id);
 					return;
 				}
+				await startSave(tab, fresh);
+				return;
+			}
+			case 'saveToBrowserOnce': {
+				// the app is the target but its host does not answer: this save (not the setting) goes to the browser
+				const tab = await tabFor(tabId);
+				if (!tab) return;
+				Zotero.NativeHost.saveOnceInBrowser();
+				const fresh = newState(tab.id, null);
+				fresh.owned = true;
+				fresh.viaBrowser = true;
+				fresh.library = 'browser';
+				states.set(tab.id, fresh);
+				push(tab.id);
+				await startSave(tab, fresh);
+				return;
+			}
+			case 'setSaveTarget': {
+				if (msg.target !== 'app' && msg.target !== 'browser') return;
 				try {
-					await Zotero.Connector_Browser.onZoteroButtonElementClick(tab);
+					await Zotero.NativeHost.setSaveTarget(msg.target);
 				}
 				catch (e) {
-					fresh.errors.push(e.message);
+					port.postMessage({ type: 'result', ok: false, error: e.message });
+					return;
 				}
-				setTimeout(() => {
-					if (states.get(tab.id) === fresh && fresh.starting) {
-						fresh.starting = false;
-						fresh.nothing = true;
-						push(tab.id);
-					}
-				}, NOTHING_AFTER_MS);
+				// every popup state follows the setting, except a save already sent to the browser once
+				for (const st of states.values()) {
+					if (!st.viaBrowser) st.library = msg.target;
+					st.hostDown = false;
+				}
+				if (s) checkLibrary(s);
+				for (const t of new Set(ports.values())) push(t);
 				return;
 			}
 			case 'setTarget': {
@@ -332,9 +403,14 @@ Zotero.SavePopup = new function () {
 				return;
 			}
 			case 'openLibrary':
-				await Zotero.Connector_Browser.openLibrary(msg.key);
+				await Zotero.Connector_Browser.openLibrary(msg.key, s ? { browser: s.library == 'browser' } : {});
 				return;
 			case 'openInZinc': {
+				if (s && s.library == 'browser') {
+					// there is no app to show it in
+					port.postMessage({ type: 'result', ok: false, error: 'This item is in the library in this browser.' });
+					return;
+				}
 				try {
 					const r = await host('revealInApp', { key: msg.key, open: !!msg.open });
 					port.postMessage({ type: 'result', ok: true, started: !!(r && r.started), opened: r && r.opened });

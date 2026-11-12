@@ -61,7 +61,7 @@
 
 	const ERRORS = {
 		translationError: 'The page could not be read. Try again, or save it as a web page from the right-click menu.',
-		clientRequired: 'Zinc could not be reached. Check that the Zinc Connector host is installed.',
+		clientRequired: 'Zinc could not be reached. Check that the Zinc Connector host is installed, or save to this browser.',
 		noTranslator: 'Nothing on this page can be saved.',
 		upgradeClient: 'This page needs a newer Zinc.',
 	};
@@ -133,8 +133,18 @@
 		if (noSession) closeChooser();
 		if (!$('chooser').hidden) renderChooser();
 
+		// where this save goes: the Zinc app or this browser's own library
+		const lib = s.library === 'browser' ? 'browser' : 'app';
+		$('target-name').textContent = lib === 'browser' ? (s.viaBrowser ? 'This browser (this save only)' : 'This browser') : 'Zinc app';
+		const setting = s.viaBrowser ? 'app' : lib;
+		for (const b of document.querySelectorAll('.target-opt')) b.setAttribute('aria-checked', String(b.dataset.target === setting));
+		$('host-down').hidden = !(lib === 'app' && s.hostDown && !removed && !s.cancelled);
+
 		// actions
 		const key = savedKey();
+		// there is no app to show an item in, when it was saved to this browser
+		$('open-item').hidden = lib === 'browser';
+		$('open-zinc').hidden = lib === 'browser';
 		const ready = !!key && !removed && !s.cancelled;
 		$('open-item').disabled = !ready;
 		$('open-item').lastChild.textContent = ready ? openable() : 'Open item';
@@ -253,6 +263,18 @@
 			$('picker').focus();
 		}
 	});
+	const closeTargetMenu = () => { $('target-menu').hidden = true; $('target-change').setAttribute('aria-expanded', 'false'); };
+	$('target-change').addEventListener('click', () => {
+		const open = $('target-menu').hidden;
+		$('target-menu').hidden = !open;
+		$('target-change').setAttribute('aria-expanded', String(open));
+	});
+	for (const b of document.querySelectorAll('.target-opt')) {
+		b.addEventListener('click', () => { lastResult = null; send({ cmd: 'setSaveTarget', target: b.dataset.target }); closeTargetMenu(); });
+	}
+	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('target-menu').hidden) { e.preventDefault(); closeTargetMenu(); $('target-change').focus(); } });
+	// Zinc app not answering: this save goes to the browser, the setting stays
+	$('save-in-browser').addEventListener('click', () => { lastResult = null; send({ cmd: 'saveToBrowserOnce' }); });
 	$('cancel').addEventListener('click', () => send({ cmd: 'cancel' }));
 	$('remove').addEventListener('click', () => send({ cmd: 'remove' }));
 	$('open-library').addEventListener('click', () => { send({ cmd: 'openLibrary', key: savedKey() }); closeSoon(); });

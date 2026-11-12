@@ -61,6 +61,34 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', () => init());
 
+/*
+ * zotero-next fork: the browser library. Chrome allows one offscreen document per extension, and this is it, so the
+ * library database (library/offscreen.html: starts the DB worker, answers ports named "zinc-db") runs in a frame of
+ * this page. The frame is added when the save target is "browser" (chrome.storage.local zincBrowserLibrary), at load
+ * and when the setting changes; it is not removed again (an idle database costs nothing).
+ */
+const LIBRARY_STORAGE_KEY = 'zincBrowserLibrary';
+function attachLibraryFrame() {
+	if (document.getElementById('zinc-db-frame')) return;
+	const frame = document.createElement('iframe');
+	frame.id = 'zinc-db-frame';
+	frame.src = chrome.runtime.getURL('library/offscreen.html');
+	frame.hidden = true;
+	document.body.append(frame);
+}
+function checkLibraryTarget(value) {
+	if (value && value.saveTarget === 'browser') attachLibraryFrame();
+}
+chrome.storage.local.get(LIBRARY_STORAGE_KEY).then(r => checkLibraryTarget(r[LIBRARY_STORAGE_KEY]));
+chrome.storage.onChanged.addListener((changes, area) => {
+	if (area === 'local' && changes[LIBRARY_STORAGE_KEY]) checkLibraryTarget(changes[LIBRARY_STORAGE_KEY].newValue);
+});
+// the library tab and the popup may need the database even when the target is "app" (a save sent to the browser once)
+chrome.runtime.onMessage.addListener((msg) => {
+	if (msg && msg.zincAttachDb === true) attachLibraryFrame();
+	return false;
+});
+
 navigator.serviceWorker.onmessage = async (e) => {
 	if (e.data !== 'service-worker-restarted') return;
 	console.log('Offscreen: owner service worker restarted. reinitializing messaging');
