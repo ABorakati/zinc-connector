@@ -1086,16 +1086,17 @@ Zotero.Connector_Browser = new function() {
 		}
 	})();
 
-	/** Opens the library page, or brings an open one forward. */
-	this.openLibrary = async function () {
+	/** Opens the library page, or brings an open one forward; `key` selects that item (the save popup's "Open library"). */
+	this.openLibrary = async function (key) {
 		const url = browser.runtime.getURL('library/library.html');
 		const open = (await browser.tabs.query({})).find(t => (t.url || t.pendingUrl || '').startsWith(url));
 		if (open) {
 			await browser.tabs.update(open.id, { active: true });
 			await browser.windows.update(open.windowId, { focused: true });
+			if (key) browser.runtime.sendMessage({ zincLibrarySelect: key }).catch(() => {});
 			return;
 		}
-		await browser.tabs.create({ url });
+		await browser.tabs.create({ url: key ? `${url}?select=${encodeURIComponent(key)}` : url });
 	};
 
 	function _showPreferencesContextMenuItem() {

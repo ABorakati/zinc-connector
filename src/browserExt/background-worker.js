@@ -31,7 +31,8 @@ try {
 	var scriptsToImport = [
 		/*BACKGROUND SCRIPTS*/,
 		"keep-mv3-alive.js",
-		"background.js"
+		"background.js",
+		"savePopup.js" // zotero-next fork: the toolbar button's save popup (after background.js: it wraps Zotero.Messaging)
 	];
 
 	for (let script of scriptsToImport) {

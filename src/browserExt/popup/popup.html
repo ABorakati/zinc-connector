@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- zotero-next fork: the toolbar button's save popup (see savePopup.js). Zinc's look: Inter, the app's "Quiet Paper" colours. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Save to Zinc</title>
+<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+<main id="app" aria-live="polite">
+	<header class="top">
+		<span class="brand"><span class="tile" aria-hidden="true">Z</span>Zinc</span>
+		<span class="spacer"></span>
+		<button class="icon-btn" id="open-library-top" title="Open library" aria-label="Open library"><i class="i i-library-big"></i></button>
+	</header>
+
+	<section class="status" id="status">
+		<i class="i status-icon" id="status-icon"></i>
+		<div class="status-text">
+			<div class="headline" id="headline">Saving…</div>
+			<div class="sub" id="sub"></div>
+		</div>
+	</section>
+
+	<ul class="items" id="items" aria-label="Items in this save"></ul>
+
+	<section class="folder" id="folder">
+		<div class="label">Collection</div>
+		<button class="picker" id="picker" aria-haspopup="listbox" aria-expanded="false">
+			<i class="i i-folder" id="picker-icon"></i>
+			<span class="picker-name" id="picker-name">My Library</span>
+			<i class="i i-chevron-down chevron"></i>
+		</button>
+		<div class="chooser" id="chooser" hidden>
+			<div class="search">
+				<i class="i i-search"></i>
+				<input id="search" type="search" placeholder="Find a collection" autocomplete="off" spellcheck="false" aria-label="Find a collection" />
+			</div>
+			<div class="recent" id="recent" hidden>
+				<div class="label small"><i class="i i-history"></i>Recent</div>
+				<div class="chips" id="recent-chips"></div>
+			</div>
+			<ul class="tree" id="tree" role="listbox" aria-label="Collections"></ul>
+		</div>
+	</section>
+
+	<section class="actions" id="actions">
+		<button class="btn" id="open-item" title="Open the saved item in Zinc (its PDF or snapshot in the reader)"><i class="i i-book-open"></i>Open item</button>
+		<button class="btn" id="open-zinc" title="Show the saved item in the Zinc app"><i class="i i-app-window"></i>Open in Zinc</button>
+		<button class="btn" id="open-library" title="Open your library in a browser tab"><i class="i i-library-big"></i>Open library</button>
+	</section>
+
+	<footer class="foot">
+		<span class="message" id="message"></span>
+		<span class="spacer"></span>
+		<button class="btn ghost danger" id="cancel" hidden><i class="i i-ban"></i>Cancel</button>
+		<button class="btn ghost danger" id="remove" hidden><i class="i i-trash-2"></i>Remove</button>
+	</footer>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

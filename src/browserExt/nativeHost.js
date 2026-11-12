@@ -33,6 +33,9 @@
 
 Zotero.NativeHost = new function() {
 	const HOST_NAME = 'com.zotero_next.connector_host';
+	// Headless checks (zotero-next gpui-ui/web/popup-check.ts) point a test profile at a host registered under its own name,
+	// so they never start the installed host or open the real library. See useHostForTests().
+	let hostName = HOST_NAME;
 	// Raw bytes per upload message. Chrome allows 64 MB per message to a host, but one port is one queue: a 20 MB
 	// PDF posted as one burst makes every other call (ping, a save in another tab) wait behind it. So big bodies go
 	// in small pieces, with a turn of the event loop between them for other calls to slip in.
@@ -105,7 +108,7 @@ Zotero.NativeHost = new function() {
 
 	function connect() {
 		if (port) return port;
-		port = chrome.runtime.connectNative(HOST_NAME);
+		port = chrome.runtime.connectNative(hostName);
 		portSpoke = false;
 		protoPromise = null;
 		let thisPort = port;
@@ -395,5 +398,15 @@ Zotero.NativeHost = new function() {
 	/** Diagnostics: the host's version and the library it opened. */
 	this.hello = function () {
 		return roundTrip({ t: 'hello' }, 5000);
+	};
+
+	/** Tests only: use another registration of the host (com.zotero_next.*), from the next call on. */
+	this.useHostForTests = function (name) {
+		if (!/^com\.zotero_next\.[a-z0-9_.]+$/.test(name)) throw new Error(`not a Zinc host name: ${name}`);
+		hostName = name;
+		if (port) port.disconnect();
+		port = null;
+		pingCache = null;
+		protoPromise = null;
 	};
 };

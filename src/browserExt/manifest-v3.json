@@ -10,7 +10,8 @@
 			"32": "images/toolbar/webpage-gray.png",
 			"48": "images/toolbar/webpage-gray@48.png"
 		},
-		"default_title": "__MSG_extension_defaultTitle__"
+		"default_title": "__MSG_extension_defaultTitle__",
+		"default_popup": "popup/popup.html"
 	},
 	"host_permissions": ["http://127.0.0.1/*", "https://repo.zotero.org/*", "https://api.zotero.org/*", "http://*/*", "https://*/*"],
 	"permissions": ["tabs", "contextMenus", "cookies", "scripting", "offscreen",
