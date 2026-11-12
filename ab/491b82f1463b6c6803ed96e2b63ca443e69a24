@@ -1,0 +1,61 @@
+src/browserExt/zotero-api-key-rules.json
+  s_e8244edae027cb::t_46f3352bd04e35 1-16
+src/browserExt/offscreen/offscreen.js
+  s_e8244edae027cb::t_6f3370cae98f2c 64-91
+src/browserExt/manifest-v3.json
+  s_e8244edae027cb::t_4c21e57f20c195 18-19,25-28
+src/browserExt/background.js
+  s_e8244edae027cb::t_bb7b8d29d6006b 1090-1095,1097-1099,1106-1109
+src/browserExt/nativeHost.js
+  s_e8244edae027cb::t_3cbcd489d7fcfd 187
+  s_e8244edae027cb::t_414f95869efed0 307
+  s_e8244edae027cb::t_4fad6d7fe089cb 317-318
+  s_e8244edae027cb::t_e4254bc88e7785 361,363-364,368,371,377,384-403,408-568,578-584,586,590,595,608,612,614,622,625,627,634-636,638,640-701
+  s_e8244edae027cb::t_38cf18dc7cb689 257-258
+  s_e8244edae027cb::t_9a4de29717106e 260-261,264,268,273
+  s_e8244edae027cb::t_3651dd0a3346ea 64-78,80,83-89
+  s_e8244edae027cb::t_374fc543c12fbe 244-245,248
+  s_e8244edae027cb::t_98734da5b8af19 129-131,133,138-148,151,153-158,164-167,170-171,176,179
+  s_e8244edae027cb::t_c825fbade34dcd 297-301,303
+  s_e8244edae027cb::t_ded9ecc0c9ba2c 357
+  s_e8244edae027cb::t_bac96ceb273406 32-41
+src/browserExt/popup/popup.js
+  s_e8244edae027cb::t_5e81740977e0eb 136-142,145-147
+  s_e8244edae027cb::t_a394ab65f091e5 266-277
+  s_e8244edae027cb::t_af59d143e85205 64
+src/browserExt/popup/popup.css
+  s_e8244edae027cb::t_2e6902475890fc 174-191
+src/browserExt/savePopup.js
+  s_e8244edae027cb::t_a82007e677f8da 325,332
+  s_e8244edae027cb::t_84c10f8920382e 333-350,352,355-356,358-364
+  s_e8244edae027cb::t_7975bcf09bede0 406,409-413
+  s_e8244edae027cb::t_692111c6b409fa 57-59,63-95
+  s_e8244edae027cb::t_647a7b8c95fc76 214-217,219-220
+  s_e8244edae027cb::t_db554b8b04db72 257-258
+  s_e8244edae027cb::t_881ef807e18ca7 18-22
+  s_e8244edae027cb::t_e9ab06cf8e8158 96
+src/browserExt/popup/popup.html
+  s_e8244edae027cb::t_fe39e95b62a382 17-33
+src/browserExt/background/offscreenManager.js
+  s_e8244edae027cb::t_89534ab6d58777 44
+  s_e8244edae027cb::t_d7d56261e4b8d2 43
+test/native/browserTarget.test.ts
+  s_e8244edae027cb::t_2af9bfd9e0117a 1-272,274-279
+  s_e8244edae027cb::t_e96a3aa4cc8b54 273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab491b82f1463b6c6803ed96e2b63ca443e69a24",
+  "prompts": {},
+  "sessions": {
+    "s_e8244edae027cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1dc5ae7-c6db-4d3a-83d0-ba9036d23ba9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
