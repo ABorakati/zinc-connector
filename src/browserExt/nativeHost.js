@@ -30,15 +30,22 @@
 	  status 503 the library is busy (another program holds the write lock)
 	Calls that only read (IDEMPOTENT) are retried once, after a reconnect, on 502 / 503.
 
-	Browser library (no desktop app): the same frames go to the library database that lives in this browser (an
-	offscreen document, answering extension ports named "zinc-db") instead of the native host. Which of the two a
-	call goes to is the "save target", kept in chrome.storage.local under "zincBrowserLibrary":
-	  {saveTarget: "app" | "browser", firstRunDone: boolean}
-	The first call that needs it pings the native host: an answer picks "app", none picks "browser". After that the
-	target changes only when the user changes it (setSaveTarget), never by itself. A single save can be sent to the
-	browser without changing the setting (saveOnceInBrowser). In browser mode getTranslators / getTranslatorCode
-	fail locally (status 0, "no client"), so Zotero.Repo loads translators from repo.zotero.org, as upstream does
-	when no Zotero client is running.
+	One library per computer (zotero-next docs/design/browser-edition.md, section 6). Which library a call goes to is
+	the "save target", worked out from whether the app's native host is registered. It is not a stored choice:
+	  app installed (the host answers)                         -> "app"
+	  Chrome: "Specified native messaging host not found"      -> "browser" (the library in this browser, an
+	      offscreen document answering extension ports named "zinc-db"; created empty the first time it is needed)
+	  the host is registered but fails (crashes, busy)         -> still "app": the call fails with the host's
+	      message, and nothing goes to the browser library. The popup offers Try again.
+	The target is looked up when the browser starts and before each save (refreshTarget); other calls reuse the
+	last answer for TARGET_TTL. A save session keeps the library it started in. Installing the app switches the
+	extension to it, and uninstalling switches back.
+	When the app is installed and the browser library holds items, moveBrowserLibrary() exports the browser library
+	(the Export library zip), has the host merge it into the app's library (importBrowserLibrary), and, when that
+	succeeded, empties the browser library. chrome.storage.local "zincBrowserLibrary" keeps {firstRunDone} for the
+	library tab's welcome screen; "zincBrowserLibraryCreated" says the browser library exists.
+	In browser mode getTranslators / getTranslatorCode fail locally (status 0, "no client"), so Zotero.Repo loads
+	translators from repo.zotero.org, as upstream does when no Zotero client is running.
 */
 
 Zotero.NativeHost = new function() {
@@ -62,12 +69,15 @@ Zotero.NativeHost = new function() {
 	const RETRY_DELAY = 250;
 
 	const LIBRARY_KEY = 'zincBrowserLibrary';
+	const CREATED_KEY = 'zincBrowserLibraryCreated';
 	const DB_PORT_NAME = 'zinc-db';
 	// The browser library does not serve these (it answers 404): translators come from repo.zotero.org
 	const NOT_IN_BROWSER_LIBRARY = new Set(['getTranslators', 'getTranslatorCode']);
 	const OFFSCREEN_URL = 'offscreen/offscreen.html';
-	// How long a "save to this browser instead" stays armed for the save that follows
-	const ONCE_MS = 120000;
+	// A save starts with one of these: the target is looked up again then (the user may have installed the app a minute ago)
+	const SAVE_STARTING = new Set(['saveItems', 'saveSnapshot', 'saveStandaloneAttachment', 'import']);
+	// Other calls reuse the last answer this long
+	const TARGET_TTL = 30000;
 	const MAX_SESSION_ROUTES = 200;
 
 	// One channel per destination. port: the open chrome.runtime port; spoke: true once the current port has
@@ -82,11 +92,12 @@ Zotero.NativeHost = new function() {
 	let pingCache = null; // {key, at, promise}
 
 	// ---- the save target
-	let settings = null; // {saveTarget, firstRunDone}
-	let settingsPromise = null;
-	let onceUntil = 0;
-	// sessionID -> 'browser': saves sent to the browser while the target is the app
+	let target = null; // {value: 'app' | 'browser', at, hostError: string | null}
+	let targetPromise = null;
+	// sessionID -> 'app' | 'browser': the library a save session started in
 	const sessionRoutes = new Map();
+	let moving = null; // the move in progress
+	let createdFlag = null; // what this worker last wrote to CREATED_KEY (null: not written yet)
 
 	const hasNativeBase64 = typeof Uint8Array.prototype.toBase64 == 'function';
 	const hasNativeFromBase64 = typeof Uint8Array.fromBase64 == 'function';
@@ -172,8 +183,11 @@ Zotero.NativeHost = new function() {
 			}
 			else {
 				// status 0 is what a dead HTTP connection gave upstream: callers treat it as "Zotero is offline"
-				failAll(new Zotero.Connector.CommunicationError(
-					`${who} is not available: ${message}`, 0), channel);
+				let error = new Zotero.Connector.CommunicationError(`${who} is not available: ${message}`, 0);
+				// Chrome: "Specified native messaging host not found." = the app is not installed (nothing is registered).
+				// Anything else (forbidden, "Native host has exited") is a host that is there and does not work.
+				error.notInstalled = !browserMode && /host not found/i.test(message);
+				failAll(error, channel);
 			}
 		});
 		return thePort;
@@ -227,7 +241,7 @@ Zotero.NativeHost = new function() {
 				offset += c.length;
 			}
 		}
-		let responseText = bytes.length ? new TextDecoder().decode(bytes) : '';
+		let responseText = bytes.length && !p.binary ? new TextDecoder().decode(bytes) : '';
 		let headers = {};
 		for (let k in p.res.headers) headers[k.toLowerCase()] = p.res.headers[k];
 		// The slice of XMLHttpRequest / Zotero.HTTP.request's result that callMethod uses
@@ -235,6 +249,7 @@ Zotero.NativeHost = new function() {
 			status: p.res.status,
 			response: responseText,
 			responseText,
+			responseBytes: bytes,
 			getResponseHeader: name => headers[name.toLowerCase()] ?? null,
 			getAllResponseHeaders: () => Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\r\n')
 		});
@@ -257,11 +272,11 @@ Zotero.NativeHost = new function() {
 	 * @param {String[]} uids - uploads this request refers to (dropped if it fails)
 	 * @param {Object} channel - channels.app | channels.browser
 	 */
-	function roundTrip(msg, timeout, uids, channel) {
+	function roundTrip(msg, timeout, uids, channel, binary) {
 		uids = uids || [];
 		return new Promise(function (resolve, reject) {
 			let id = nextId++;
-			let p = { resolve, reject, res: null, chunks: [], received: 0, timer: null, timeout, uids, channel };
+			let p = { resolve, reject, res: null, chunks: [], received: 0, timer: null, timeout, uids, channel, binary: !!binary };
 			pending.set(id, p);
 			arm(p, id);
 			try {
@@ -359,7 +374,7 @@ Zotero.NativeHost = new function() {
 	}
 
 	async function send(httpMethod, method, options, channel) {
-		let { body, headers = {}, queryString = '', timeout = 15000 } = options;
+		let { body, headers = {}, queryString = '', timeout = 15000, path, binary } = options;
 		let browserMode = channel.route == 'browser';
 		if (browserMode) await ensureBrowserLibrary();
 		let uids = [];
@@ -378,10 +393,12 @@ Zotero.NativeHost = new function() {
 			t: 'req',
 			method,
 			http: httpMethod,
+			// `path`: the "api" method (the library tab's own /api requests); the other methods have none
+			...(path ? { path } : {}),
 			query: queryString.replace(/^\?/, ''),
 			headers,
 			body: wireBody
-		}, timeout, uids, channel);
+		}, timeout, uids, channel, binary);
 		return browserMode && method == 'ping' ? withoutTranslatorHashes(xhr) : xhr;
 	}
 
@@ -408,62 +425,73 @@ Zotero.NativeHost = new function() {
 	// ---- the save target (see the header comment)
 
 	const storage = () => (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) || null;
-	const validTarget = t => t === 'app' || t === 'browser';
 	const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-	/** Does the native host answer? Any answer will do: it is installed and running. */
+	/**
+	 * Asks the app's host. {state: 'ok'}: it answers. {state: 'missing'}: Chrome has no such host registered, so the app
+	 * is not installed. {state: 'failed', message}: it is registered and does not work (it exits at once, is forbidden,
+	 * does not answer in time).
+	 */
 	async function probeHost() {
 		try {
 			let xhr = await send('GET', 'ping', { timeout: 5000 }, channels.app);
-			return xhr.status > 0;
+			return xhr.status > 0 ? { state: 'ok' } : { state: 'failed', message: 'The Zinc app did not answer.' };
 		}
 		catch (e) {
-			return !!(e && e.status && e.status != 0);
+			if (e && e.notInstalled) return { state: 'missing' };
+			return { state: 'failed', message: e && e.message ? e.message : 'The Zinc app did not answer.' };
 		}
 	}
 
-	function getSettings() {
-		if (settings) return Promise.resolve(settings);
-		if (!settingsPromise) {
-			settingsPromise = (async function () {
-				let st = storage();
-				if (!st) {
-					// no storage (tests): the app, as before the browser library existed
-					return settings = { saveTarget: 'app', firstRunDone: false };
+	/** Looks the target up now. Calls that ask at the same time share one probe. */
+	function lookUpTarget() {
+		if (!targetPromise) {
+			targetPromise = (async function () {
+				let r = await probeHost();
+				let previous = target && target.value;
+				target = {
+					value: r.state == 'missing' ? 'browser' : 'app',
+					at: Date.now(),
+					hostError: r.state == 'failed' ? r.message : null
+				};
+				if (previous && previous != target.value) {
+					pingCache = null;
+					Zotero.debug(`NativeHost: saving to ${target.value == 'app' ? 'the Zinc app' : 'this browser'} now`);
 				}
-				let stored = (await st.get(LIBRARY_KEY))[LIBRARY_KEY] || {};
-				if (validTarget(stored.saveTarget)) {
-					return settings = { ...stored, firstRunDone: !!stored.firstRunDone };
-				}
-				// First need: the host answers -> the app, else this browser
-				let saveTarget = (await probeHost()) ? 'app' : 'browser';
-				// another page may have written it meanwhile
-				let again = (await st.get(LIBRARY_KEY))[LIBRARY_KEY] || {};
-				if (validTarget(again.saveTarget)) {
-					return settings = { ...again, firstRunDone: !!again.firstRunDone };
-				}
-				settings = { ...again, saveTarget, firstRunDone: true };
-				await st.set({ [LIBRARY_KEY]: settings });
-				Zotero.debug(`NativeHost: first run, saving to ${saveTarget === 'app' ? 'the Zinc app' : 'this browser'}`);
-				return settings;
+				return target;
 			})();
-			settingsPromise.then(() => { settingsPromise = null; }, () => { settingsPromise = null; });
+			targetPromise.then(() => { targetPromise = null; }, () => { targetPromise = null; });
 		}
-		return settingsPromise;
+		return targetPromise;
 	}
 
-	if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-		chrome.storage.onChanged.addListener(function (changes, area) {
-			if (area != 'local' || !changes[LIBRARY_KEY]) return;
-			let v = changes[LIBRARY_KEY].newValue;
-			settings = v && validTarget(v.saveTarget) ? { ...v, firstRunDone: !!v.firstRunDone } : null;
-			pingCache = null;
-		});
+	/** {value: 'app' | 'browser', hostError}. `fresh`: ask the host again instead of using an answer from the last TARGET_TTL. */
+	async function getTarget(fresh) {
+		if (!fresh && target && Date.now() - target.at < TARGET_TTL) return target;
+		// An open port to the host that has answered is the proof already: the host is registered and running
+		let app = channels.app;
+		if (app.port && app.spoke) {
+			target = { value: 'app', at: Date.now(), hostError: null };
+			return target;
+		}
+		return lookUpTarget();
 	}
 
-	function rememberSession(sessionID) {
+	/** Earlier builds stored a choice ("saveTarget"); there is none now: the host decides. firstRunDone stays. */
+	async function dropStoredChoice() {
+		let st = storage();
+		if (!st) return;
+		let stored = (await st.get(LIBRARY_KEY))[LIBRARY_KEY];
+		if (stored && typeof stored == 'object' && 'saveTarget' in stored) {
+			let { saveTarget, ...rest } = stored;
+			await st.set({ [LIBRARY_KEY]: rest });
+		}
+	}
+	dropStoredChoice().catch(e => Zotero.debug(`NativeHost: ${e.message}`));
+
+	function rememberSession(sessionID, route) {
 		sessionRoutes.delete(sessionID);
-		sessionRoutes.set(sessionID, 'browser');
+		sessionRoutes.set(sessionID, route);
 		while (sessionRoutes.size > MAX_SESSION_ROUTES) sessionRoutes.delete(sessionRoutes.keys().next().value);
 	}
 
@@ -480,19 +508,19 @@ Zotero.NativeHost = new function() {
 		return null;
 	}
 
-	/** 'app' or 'browser': where this call goes. */
+	/**
+	 * 'app' or 'browser': where this call goes. A save session keeps the library its first call went to; a call that
+	 * starts a save looks the target up again first. When the app is registered but fails, this is still 'app': the
+	 * call fails with the host's message and nothing is saved to the browser.
+	 */
 	async function routeFor(method, options) {
-		let s = await getSettings();
-		if (s.saveTarget == 'browser') return 'browser';
 		let sid = sessionIdOf(options);
-		if (sid && sessionRoutes.has(sid)) return 'browser';
-		if (Date.now() < onceUntil) {
-			// "Save to this browser instead": this save, and the calls that belong to it
-			if (sid) rememberSession(sid);
-			return 'browser';
-		}
-		return 'app';
+		if (sid && sessionRoutes.has(sid)) return sessionRoutes.get(sid);
+		let t = await getTarget(SAVE_STARTING.has(method));
+		if (sid) rememberSession(sid, t.value);
+		return t.value;
 	}
+
 
 	// ---- the offscreen document that owns the browser library
 	// Chrome allows ONE offscreen document per extension. The connector already has one, for the translator frames
@@ -537,13 +565,25 @@ Zotero.NativeHost = new function() {
 	 * (sqlite WebAssembly), so a ping is tried until it answers.
 	 */
 	function ensureBrowserLibrary() {
+		return startBrowserLibrary().then(ok => {
+			// the library exists in this browser (again, after a move emptied it): the move offer checks it (browserLibraryState)
+			if (createdFlag !== true) {
+				createdFlag = true;
+				let st = storage();
+				if (st) st.set({ [CREATED_KEY]: true }).catch(() => {});
+			}
+			return ok;
+		});
+	}
+
+	function startBrowserLibrary() {
 		let channel = channels.browser;
 		if (channel.ready) return channel.ready;
 		let ready = (async function () {
 			await ensureOffscreen();
 			let last;
 			for (let i = 0; i < 60; i++) {
-				// the database frame is added when the target is "browser"; this also covers a save sent to the browser once
+				// the database frame is added when it is asked for (this message), not when the connector starts
 				try {
 					let sent = chrome.runtime.sendMessage({ zincAttachDb: true });
 					if (sent && sent.catch) sent.catch(() => {});
@@ -636,67 +676,175 @@ Zotero.NativeHost = new function() {
 		ch.port = null;
 		pingCache = null;
 		ch.protoPromise = null;
+		target = null; // the new registration decides again
 	};
 
 	// ---- what the popup, the options and the library tab use
 
-	/** "app" | "browser": where saves go. The first call on a fresh install decides it (see the header comment). */
+	/** "app" | "browser": where saves go now (see the header comment). */
 	this.getSaveTarget = async function () {
-		return (await getSettings()).saveTarget;
-	};
-
-	/** The user's choice. Never called by anything but the user's own action. */
-	this.setSaveTarget = async function (target) {
-		if (!validTarget(target)) throw new Error(`not a save target: ${target}`);
-		settings = { ...(await getSettings()), saveTarget: target, firstRunDone: true };
-		pingCache = null;
-		let st = storage();
-		if (st) await st.set({ [LIBRARY_KEY]: settings });
-		if (target == 'browser') ensureBrowserLibrary().catch(e => Zotero.debug(`NativeHost: ${e.message}`));
-	};
-
-	/** Does the native host answer right now? A fresh ping, not the cached one. */
-	this.isHostReachable = async function () {
-		pingCache = null;
-		return probeHost();
+		return (await getTarget(false)).value;
 	};
 
 	/**
-	 * "Save to this browser instead", for the next save only: its calls (and its session's later calls: move,
-	 * cancel, remove) go to the browser library. The setting does not change.
+	 * Looks the target up again, from the host: {target: 'app' | 'browser', hostError}. hostError is the host's
+	 * message when the app is registered but does not work (target stays 'app'); null otherwise. The popup and the
+	 * library tab call this when they open, and "Try again" does.
 	 */
-	this.saveOnceInBrowser = function () {
-		onceUntil = Date.now() + ONCE_MS;
-		pingCache = null;
+	this.refreshTarget = async function () {
+		let t = await getTarget(true);
+		return { target: t.value, hostError: t.hostError };
 	};
-	this.endSaveOnce = function () {
-		onceUntil = 0;
-	};
-	/** Sends a save session's calls to the browser library (the popup knows the session id before any call has it). */
-	this.routeSessionToBrowser = rememberSession;
+
 	/** 'browser' | 'app': where the calls of this save session go. */
 	this.routeOfSession = async function (sessionID) {
-		return (await getSettings()).saveTarget == 'browser' || sessionRoutes.has(sessionID) ? 'browser' : 'app';
+		return sessionRoutes.get(sessionID) || (await getTarget(false)).value;
 	};
 	this.ensureBrowserLibrary = ensureBrowserLibrary;
 	this.ensureOffscreen = ensureOffscreen;
 
-	// A new install picks the target now rather than at the first save
-	if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onInstalled) {
-		chrome.runtime.onInstalled.addListener(function () {
-			getSettings().catch(e => Zotero.debug(`NativeHost: first run failed: ${e.message}`));
-		});
+	// ---- moving the browser library into the app
+
+	function errorOf(xhr) {
+		try {
+			let j = JSON.parse(xhr.responseText || new TextDecoder().decode(xhr.responseBytes));
+			return j && j.error ? String(j.error) : null;
+		}
+		catch (e) {
+			return null;
+		}
 	}
 
-	// The library tab (browser mode) asks for the database to be started: {zincEnsureDb: true} -> {ok: true}
+	async function setCreated(value) {
+		createdFlag = value;
+		let st = storage();
+		if (st) await st.set({ [CREATED_KEY]: value });
+	}
+
+	/**
+	 * Is there a browser library to move into the app? {offer, items}: offer is true when the app is installed and
+	 * answers, the browser library exists, and it holds items. A browser that never used its library does not start
+	 * the database to look.
+	 */
+	this.browserLibraryState = async function () {
+		let none = { offer: false, items: 0, collections: 0 };
+		let t = await getTarget(false);
+		if (t.value != 'app' || t.hostError) return none;
+		let st = storage();
+		if (!st || !(await st.get(CREATED_KEY))[CREATED_KEY]) return none;
+		try {
+			let xhr = await send('GET', 'api', { path: '/api/browser/state', timeout: 30000 }, channels.browser);
+			let j = JSON.parse(xhr.responseText);
+			// top-level items: the ones the user counts (an attachment or a note is part of its item)
+			let items = Number(j.topLevelItems ?? j.items) || 0;
+			return { offer: xhr.status == 200 && items > 0, items, collections: Number(j.collections) || 0 };
+		}
+		catch (e) {
+			Zotero.debug(`NativeHost: browser library state: ${e.message}`);
+			return none;
+		}
+	};
+
+	/**
+	 * Moves the browser library into the app: export (the Export library zip), the host merges it into the app's
+	 * library, and only when that answered 200 the browser library is emptied. Items the app already has (same key)
+	 * are skipped. Resolves to the host's counts plus {emptied}. Rejects with a message for the user; nothing is
+	 * emptied then. One move at a time: a second call gets the first one's promise.
+	 *
+	 * @param {Function} [onProgress] - ({phase: 'export' | 'send' | 'empty', text})
+	 */
+	this.moveBrowserLibrary = function (onProgress) {
+		if (moving) return moving;
+		let progress = (phase, text) => {
+			try {
+				if (onProgress) onProgress({ phase, text });
+			}
+			catch (e) {}
+		};
+		moving = (async function () {
+			let t = await getTarget(true);
+			if (t.value != 'app') throw new Error('The Zinc app is not installed.');
+			if (t.hostError) throw new Error(t.hostError);
+			progress('export', 'Exporting your browser library');
+			let exported = await send('GET', 'api', { path: '/api/browser/export', timeout: 120000, binary: true }, channels.browser);
+			if (exported.status != 200) throw new Error(errorOf(exported) || `The browser library could not be exported (HTTP ${exported.status}).`);
+			progress('send', 'Sending it to Zinc');
+			let imported = await send('POST', 'importBrowserLibrary', {
+				body: exported.responseBytes,
+				headers: { 'Content-Type': 'application/zip' },
+				timeout: 180000
+			}, channels.app);
+			if (imported.status != 200) throw new Error(errorOf(imported) || `Zinc could not take the library (HTTP ${imported.status}).`);
+			let result = JSON.parse(imported.responseText);
+			// The items are in the app now. Only then is the browser library emptied.
+			progress('empty', 'Emptying the browser library');
+			try {
+				let emptied = await send('POST', 'api', {
+					path: '/api/browser/empty',
+					body: JSON.stringify({ confirm: true }),
+					headers: { 'Content-Type': 'application/json' },
+					timeout: 60000
+				}, channels.browser);
+				result.emptied = emptied.status == 200;
+				if (!result.emptied) result.emptyError = errorOf(emptied) || `HTTP ${emptied.status}`;
+			}
+			catch (e) {
+				result.emptied = false;
+				result.emptyError = e.message;
+			}
+			if (result.emptied) await setCreated(false);
+			return result;
+		})();
+		let clear = () => { moving = null; };
+		moving.then(clear, clear);
+		return moving;
+	};
+
+	const fromExtensionPage = sender => !!sender && typeof sender.url == 'string'
+		&& typeof chrome !== 'undefined' && !!chrome.runtime.getURL && sender.url.startsWith(chrome.runtime.getURL(''));
+
+	// The target is looked up when the browser starts, and when the extension is installed or updated
+	if (typeof chrome !== 'undefined' && chrome.runtime) {
+		for (let event of ['onStartup', 'onInstalled']) {
+			if (!chrome.runtime[event]) continue;
+			chrome.runtime[event].addListener(function () {
+				getTarget(true).catch(e => Zotero.debug(`NativeHost: target look-up failed: ${e.message}`));
+			});
+		}
+	}
+
+	// Messages from the extension's own pages:
+	//   {zincEnsureDb: true}      the library tab (browser mode) asks for the database to be started -> {ok: true}
+	//   {zincMoveState: true}     -> {ok: true, offer, items, collections}: is there a browser library to move into the app?
+	//   {zincMoveLibrary: true}   moves it -> {ok: true, result} | {ok: false, error}; progress goes out as {zincMoveProgress: {phase, text}}
 	if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
 		chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
-			if (!msg || msg.zincEnsureDb !== true) return false;
-			ensureBrowserLibrary().then(
-				() => sendResponse({ ok: true }),
-				e => sendResponse({ ok: false, error: e.message })
-			);
-			return true;
+			if (!msg) return false;
+			if (msg.zincEnsureDb === true) {
+				ensureBrowserLibrary().then(
+					() => sendResponse({ ok: true }),
+					e => sendResponse({ ok: false, error: e.message })
+				);
+				return true;
+			}
+			if (msg.zincMoveState === true && fromExtensionPage(sender)) {
+				Zotero.NativeHost.browserLibraryState().then(
+					s => sendResponse({ ok: true, ...s }),
+					e => sendResponse({ ok: false, error: e.message })
+				);
+				return true;
+			}
+			if (msg.zincMoveLibrary === true && fromExtensionPage(sender)) {
+				Zotero.NativeHost.moveBrowserLibrary(p => {
+					let sent = chrome.runtime.sendMessage({ zincMoveProgress: p });
+					if (sent && sent.catch) sent.catch(() => {});
+				}).then(
+					result => sendResponse({ ok: true, result }),
+					e => sendResponse({ ok: false, error: e.message })
+				);
+				return true;
+			}
+			return false;
 		});
 	}
 };

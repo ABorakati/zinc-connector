@@ -16,10 +16,13 @@
 	  Open in Zinc / item     revealInApp {key, open}
 	  Open library            the library page (library/library.html) with the item selected
 
-	Browser library: a save goes to the Zinc app or to the library in this browser (Zotero.NativeHost.getSaveTarget).
-	The state carries `library` ("app" | "browser", where this save goes) so the popup can say so, and `hostDown` (the app
-	is the target but its host does not answer): the popup then offers "Save to this browser instead" for this save only
-	(cmd saveToBrowserOnce), and a small control changes the target for good (cmd setSaveTarget).
+	One library per computer: a save goes to the Zinc app when it is installed, else to the library in this browser
+	(Zotero.NativeHost.refreshTarget; no stored choice, no way to pick). The state carries `library` ("app" | "browser",
+	where this save goes) so the popup can say so as a read-only label, and `hostDown` / `hostError` (the app is installed but
+	its host fails): the save fails with the host's message and the popup offers Try again (cmd retry). Nothing goes to the
+	browser library then.
+	`move` (one object shared by all popups): when the app is installed and the browser library holds items, the popup offers
+	"Move your browser library into Zinc" (cmd moveLibrary); it shows progress and then "Moved N items into Zinc".
 */
 
 Zotero.SavePopup = new function () {
@@ -55,21 +58,69 @@ Zotero.SavePopup = new function () {
 			message: null, // last action's result for the popup's status line
 			seenDone: false,
 			library: 'app', // where this save goes: 'app' | 'browser'
-			viaBrowser: false, // sent to the browser once ("Save to this browser instead"), the setting is 'app'
-			hostDown: false, // the target is the app and its host does not answer
+			hostDown: false, // the app is installed and its host fails
+			hostError: null, // the host's message then
 		};
 	}
 
-	/** Fills in where the save goes, and whether the app's host answers. */
+	/** The move of the browser library into the app, as every popup shows it. */
+	const move = { offer: false, items: 0, busy: false, phase: null, text: '', result: null, error: null };
+
+	function pushAll() {
+		for (const t of new Set(ports.values())) push(t);
+	}
+
+	/** Is there a browser library to move into the app? (asked when a popup opens) */
+	async function checkMove() {
+		if (move.busy) return;
+		// the result of an earlier move is shown for a minute, then the box goes
+		if (move.result && Date.now() - move.doneAt > 60000) Object.assign(move, { result: null, error: null });
+		try {
+			const r = await Zotero.NativeHost.browserLibraryState();
+			move.offer = !!r.offer && !move.result;
+			move.items = r.items || 0;
+		}
+		catch (e) {
+			Zotero.debug(`SavePopup: move check failed: ${e.message}`);
+		}
+		pushAll();
+	}
+
+	async function moveLibrary() {
+		if (move.busy) return;
+		Object.assign(move, { busy: true, phase: 'export', text: 'Starting', result: null, error: null });
+		pushAll();
+		try {
+			const r = await Zotero.NativeHost.moveBrowserLibrary(p => {
+				move.phase = p.phase;
+				move.text = p.text;
+				pushAll();
+			});
+			move.result = r;
+			move.doneAt = Date.now();
+			move.offer = false;
+		}
+		catch (e) {
+			move.error = e.message;
+		}
+		finally {
+			move.busy = false;
+			pushAll();
+		}
+	}
+
+	/**
+	 * Looks up where the save goes (the host decides: app installed -> the app, else this browser), and whether the app's
+	 * host fails. Also asks whether there is a browser library to move.
+	 */
 	async function checkLibrary(s) {
 		try {
-			const target = await Zotero.NativeHost.getSaveTarget();
-			s.library = s.viaBrowser ? 'browser' : target;
-			s.hostDown = false;
+			const t = await Zotero.NativeHost.refreshTarget();
+			s.library = t.target;
+			s.hostError = t.hostError;
+			s.hostDown = t.target == 'app' && !!t.hostError;
 			push(s.tabId);
-			if (s.library == 'app') {
-				s.hostDown = !(await Zotero.NativeHost.isHostReachable());
-			}
+			if (t.target == 'app' && !t.hostError) checkMove();
 		}
 		catch (e) {
 			Zotero.debug(`SavePopup: save target check failed: ${e.message}`);
@@ -100,7 +151,7 @@ Zotero.SavePopup = new function () {
 		for (const [port, t] of ports) {
 			if (t !== tabId) continue;
 			try {
-				port.postMessage({ type: 'state', state: s });
+				port.postMessage({ type: 'state', state: { ...s, move } });
 				if (s.done || s.nothing) s.seenDone = true;
 			}
 			catch (e) {
@@ -211,12 +262,7 @@ Zotero.SavePopup = new function () {
 					s = newState(tabId, sessionID);
 					// a Cancel pressed while the popup was still waiting for the page
 					if (prev && !prev.sessionID && prev.cancelled) s.cancelled = true;
-					if (prev && !prev.sessionID && prev.viaBrowser) {
-						s.viaBrowser = true;
-						s.library = 'browser';
-					}
 					states.set(tabId, s);
-					if (s.viaBrowser && sessionID) Zotero.NativeHost.routeSessionToBrowser(sessionID);
 					checkLibrary(s);
 					s.owned = await claim(tab);
 					loadTargets(s);
@@ -254,8 +300,7 @@ Zotero.SavePopup = new function () {
 				if (!s) return false;
 				const rv = Array.isArray(args) ? args : [args];
 				s.done = { ok: !!rv[0], error: rv[0] ? null : (rv[1] || 'translationError') };
-				if (s.viaBrowser) Zotero.NativeHost.endSaveOnce();
-				else if (!rv[0] && s.library == 'app') checkLibrary(s);
+				if (!rv[0] && s.library == 'app') checkLibrary(s);
 				refreshSaved(s);
 				break;
 			}
@@ -316,6 +361,7 @@ Zotero.SavePopup = new function () {
 				if (cur && !cur.nothing && (msg.save === false || !cur.done || !cur.seenDone)) {
 					cur.owned = true;
 					push(tab.id);
+					checkMove();
 					return;
 				}
 				const fresh = newState(tab.id, null);
@@ -332,38 +378,22 @@ Zotero.SavePopup = new function () {
 				await startSave(tab, fresh);
 				return;
 			}
-			case 'saveToBrowserOnce': {
-				// the app is the target but its host does not answer: this save (not the setting) goes to the browser
+			case 'retry': {
+				// "Try again" after the app's host failed: the target is looked up again (the app may have been
+				// uninstalled meanwhile) and the save starts over
 				const tab = await tabFor(tabId);
 				if (!tab) return;
-				Zotero.NativeHost.saveOnceInBrowser();
 				const fresh = newState(tab.id, null);
 				fresh.owned = true;
-				fresh.viaBrowser = true;
-				fresh.library = 'browser';
 				states.set(tab.id, fresh);
 				push(tab.id);
+				checkLibrary(fresh);
 				await startSave(tab, fresh);
 				return;
 			}
-			case 'setSaveTarget': {
-				if (msg.target !== 'app' && msg.target !== 'browser') return;
-				try {
-					await Zotero.NativeHost.setSaveTarget(msg.target);
-				}
-				catch (e) {
-					port.postMessage({ type: 'result', ok: false, error: e.message });
-					return;
-				}
-				// every popup state follows the setting, except a save already sent to the browser once
-				for (const st of states.values()) {
-					if (!st.viaBrowser) st.library = msg.target;
-					st.hostDown = false;
-				}
-				if (s) checkLibrary(s);
-				for (const t of new Set(ports.values())) push(t);
+			case 'moveLibrary':
+				await moveLibrary();
 				return;
-			}
 			case 'setTarget': {
 				if (!s) return;
 				const t = s.targets.find(x => x.id === msg.id);

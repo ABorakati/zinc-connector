@@ -16,18 +16,23 @@
 
 	<section class="target" id="target">
 		<span class="target-text">Saving to: <strong id="target-name">Zinc app</strong></span>
-		<button class="link" id="target-change" aria-haspopup="menu" aria-expanded="false" title="Change where saves go">Change</button>
-		<div class="target-menu" id="target-menu" role="menu" hidden>
-			<button class="target-opt" role="menuitemradio" data-target="app"><i class="i i-check"></i>Zinc app</button>
-			<button class="target-opt" role="menuitemradio" data-target="browser"><i class="i i-check"></i>This browser</button>
-		</div>
 	</section>
 
 	<section class="host-down" id="host-down" hidden>
 		<i class="i i-circle-alert"></i>
 		<div class="host-down-text">
-			<div>The Zinc app is not answering.</div>
-			<button class="btn" id="save-in-browser"><i class="i i-library-big"></i>Save to this browser instead</button>
+			<div>The Zinc app did not answer.</div>
+			<div class="host-down-message" id="host-down-message"></div>
+			<button class="btn" id="try-again"><i class="i i-rotate-cw"></i>Try again</button>
+		</div>
+	</section>
+
+	<section class="move" id="move" hidden>
+		<i class="i i-folder-input" id="move-icon"></i>
+		<div class="move-text">
+			<div class="move-head" id="move-head"></div>
+			<div class="move-sub" id="move-sub"></div>
+			<button class="btn" id="move-library"><i class="i i-folder-input"></i>Move your browser library into Zinc</button>
 		</div>
 	</section>
 

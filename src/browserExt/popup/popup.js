@@ -61,7 +61,7 @@
 
 	const ERRORS = {
 		translationError: 'The page could not be read. Try again, or save it as a web page from the right-click menu.',
-		clientRequired: 'Zinc could not be reached. Check that the Zinc Connector host is installed, or save to this browser.',
+		clientRequired: 'The Zinc app did not answer, so nothing was saved. Try again.',
 		noTranslator: 'Nothing on this page can be saved.',
 		upgradeClient: 'This page needs a newer Zinc.',
 	};
@@ -109,6 +109,7 @@
 			const n = (s.saved || []).length;
 			sub = n ? plural(n, 'One item added to your library', '# items added to your library') : '';
 		}
+		else if (s.hostDown && s.library === 'app') { cls = 'error'; ic = 'circle-alert'; head = 'Could not save'; sub = 'The Zinc app did not answer, so nothing was saved.'; }
 		else if (s.starting) { head = 'Starting…'; }
 		status.className = `status ${cls}`;
 		sIcon.className = `i status-icon i-${ic}${ic === 'loader-circle' ? ' spin' : ''}`;
@@ -133,12 +134,16 @@
 		if (noSession) closeChooser();
 		if (!$('chooser').hidden) renderChooser();
 
-		// where this save goes: the Zinc app or this browser's own library
+		// where this save goes (a label: the Zinc app when it is installed, else this browser's own library)
 		const lib = s.library === 'browser' ? 'browser' : 'app';
-		$('target-name').textContent = lib === 'browser' ? (s.viaBrowser ? 'This browser (this save only)' : 'This browser') : 'Zinc app';
-		const setting = s.viaBrowser ? 'app' : lib;
-		for (const b of document.querySelectorAll('.target-opt')) b.setAttribute('aria-checked', String(b.dataset.target === setting));
-		$('host-down').hidden = !(lib === 'app' && s.hostDown && !removed && !s.cancelled);
+		$('target-name').textContent = lib === 'browser' ? 'This browser' : 'Zinc app';
+		// the app is installed and its host fails: its message, and Try again (nothing is saved to the browser then)
+		const down = lib === 'app' && s.hostDown && !removed && !s.cancelled;
+		$('host-down').hidden = !down;
+		$('host-down-message').textContent = down ? (s.hostError || '') : '';
+
+		// the browser library can be moved into the app
+		renderMove(s.move || {});
 
 		// actions
 		const key = savedKey();
@@ -152,13 +157,36 @@
 		$('open-library').classList.toggle('primary', ready);
 
 		// footer
-		$('cancel').hidden = !!(s.done || s.cancelled || removed || (s.nothing && !s.sessionID));
+		$('cancel').hidden = !!(s.done || s.cancelled || removed || (s.nothing && !s.sessionID) || (s.hostDown && s.library === 'app'));
 		$('cancel').disabled = !!s.busy;
 		$('remove').hidden = !(s.done && s.done.ok && (s.saved || []).length && !removed && !s.cancelled);
 		$('remove').disabled = !!s.busy;
 		const m = lastResult || (s.cancelled || removed ? null : s.message);
 		$('message').textContent = m ? m.text : '';
 		$('message').className = `message${m ? ' ' + m.kind : ''}`;
+	}
+
+	/** "Move your browser library into Zinc": the offer, its progress, then "Moved N items into Zinc". */
+	function renderMove(m) {
+		const box = $('move');
+		const r = m.result;
+		const show = !!(m.offer || m.busy || r || m.error);
+		box.hidden = !show;
+		box.className = `move${m.error ? ' error' : r ? ' done' : ''}`;
+		if (!show) return;
+		let head = `Move your browser library into Zinc`, sub = m.items ? `${plural(m.items, 'One item', '# items')} in this browser can go into your Zinc library.` : '';
+		if (m.busy) { head = 'Moving your browser library'; sub = m.text ? `${m.text}…` : ''; }
+		else if (m.error) { head = 'Could not move the library'; sub = `${m.error} Your browser library is unchanged.`; }
+		else if (r) {
+			head = `Moved ${r.topLevelItems} ${r.topLevelItems === 1 ? 'item' : 'items'} into Zinc`;
+			sub = [r.skippedItems ? (r.skippedItems === 1 ? 'One item was already in Zinc and was left as it is.' : `${r.skippedItems} items were already in Zinc and were left as they are.`) : '', r.emptied === false ? `The browser library could not be emptied (${r.emptyError || 'unknown error'}).` : 'Your browser library is now empty.'].filter(Boolean).join(' ');
+		}
+		$('move-head').textContent = head;
+		$('move-sub').textContent = sub;
+		$('move-library').textContent = '';
+		$('move-library').append(icon('folder-input'), document.createTextNode(m.error ? 'Try again' : 'Move your browser library into Zinc'));
+		$('move-library').hidden = !((m.offer || m.error) && !m.busy && !r);
+		$('move-icon').className = `i i-${m.busy ? 'loader-circle spin' : r ? 'check' : m.error ? 'circle-alert' : 'folder-input'}`;
 	}
 
 	function itemRow(r, child, struck) {
@@ -263,18 +291,9 @@
 			$('picker').focus();
 		}
 	});
-	const closeTargetMenu = () => { $('target-menu').hidden = true; $('target-change').setAttribute('aria-expanded', 'false'); };
-	$('target-change').addEventListener('click', () => {
-		const open = $('target-menu').hidden;
-		$('target-menu').hidden = !open;
-		$('target-change').setAttribute('aria-expanded', String(open));
-	});
-	for (const b of document.querySelectorAll('.target-opt')) {
-		b.addEventListener('click', () => { lastResult = null; send({ cmd: 'setSaveTarget', target: b.dataset.target }); closeTargetMenu(); });
-	}
-	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('target-menu').hidden) { e.preventDefault(); closeTargetMenu(); $('target-change').focus(); } });
-	// Zinc app not answering: this save goes to the browser, the setting stays
-	$('save-in-browser').addEventListener('click', () => { lastResult = null; send({ cmd: 'saveToBrowserOnce' }); });
+	// the app is installed and its host failed: the save starts over (it is never sent to the browser library)
+	$('try-again').addEventListener('click', () => { lastResult = null; send({ cmd: 'retry' }); });
+	$('move-library').addEventListener('click', () => send({ cmd: 'moveLibrary' }));
 	$('cancel').addEventListener('click', () => send({ cmd: 'cancel' }));
 	$('remove').addEventListener('click', () => send({ cmd: 'remove' }));
 	$('open-library').addEventListener('click', () => { send({ cmd: 'openLibrary', key: savedKey() }); closeSoon(); });
