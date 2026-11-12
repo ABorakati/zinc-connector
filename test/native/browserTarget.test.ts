@@ -483,6 +483,25 @@ describe("{zincEnsureDb: true}", () => {
 	});
 });
 
+describe("{zincStorage}: the browser library's key storage", () => {
+	const ask = (msg: any, sender: any) => new Promise<any>((res) => { messageListeners[0]!(msg, sender, res); });
+	const g = globalThis as any;
+	test("answers the library's offscreen page for the sync names only; only the key is writable; tabs are refused", async () => {
+		g.chrome.runtime.id ??= "pakgagonakcalfbmckaolkpidcojacaf";
+		g.chrome.storage.local.remove ??= async (k: string) => { delete store[k]; };
+		const offscreen = { id: g.chrome.runtime.id, url: `chrome-extension://${g.chrome.runtime.id}/library/offscreen.html` };
+		const tab = { id: g.chrome.runtime.id, url: `chrome-extension://${g.chrome.runtime.id}/library/library.html?mode=browser`, tab: { id: 3 } };
+		expect(await ask({ zincStorage: { op: "set", name: "zincZoteroApiKey", value: "k1" } }, offscreen)).toEqual({ ok: true });
+		expect(await ask({ zincStorage: { op: "get", name: "zincZoteroApiKey" } }, offscreen)).toEqual({ ok: true, value: "k1" });
+		expect((await ask({ zincStorage: { op: "get", name: "zincZoteroApiKey" } }, tab)).ok).toBe(false);
+		expect((await ask({ zincStorage: { op: "get", name: "zincBrowserLibrary" } }, offscreen)).ok).toBe(false);
+		expect((await ask({ zincStorage: { op: "set", name: "zincTestZoteroApiBase", value: "http://127.0.0.1:1" } }, offscreen)).ok).toBe(false);
+		expect((await ask({ zincStorage: { op: "get", name: "zincZoteroApiKey" } }, { id: "otherextensionid", url: offscreen.url })).ok).toBe(false);
+		expect(await ask({ zincStorage: { op: "remove", name: "zincZoteroApiKey" } }, offscreen)).toEqual({ ok: true });
+		expect(await ask({ zincStorage: { op: "get", name: "zincZoteroApiKey" } }, offscreen)).toEqual({ ok: true, value: undefined });
+	});
+});
+
 describe("files", () => {
 	const rules = JSON.parse(readFileSync(join(ROOT, "src/browserExt/zotero-api-key-rules.json"), "utf8"));
 	const manifest = readFileSync(join(ROOT, "src/browserExt/manifest-v3.json"), "utf8");

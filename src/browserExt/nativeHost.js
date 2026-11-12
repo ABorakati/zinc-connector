@@ -844,6 +844,24 @@ Zotero.NativeHost = new function() {
 				);
 				return true;
 			}
+			// {zincStorage: {op, name, value}}: the browser library's database worker keeps the zotero.org API key here. An offscreen
+			// document has no chrome.storage, so it asks this service worker (zotero-next gpui-ui/web/browser-db/CONTRACT.md, "zotero.org
+			// sync"). Only from the library's offscreen page, only the names sync uses, and only the key is writable: no tab ever gets it.
+			if (msg.zincStorage) {
+				let { op, name, value } = msg.zincStorage;
+				let fromLibraryOffscreen = sender && sender.id === chrome.runtime.id
+					&& /^chrome-extension:\/\/[a-p]{32}\/library\/offscreen\.html(\?|#|$)/.test(sender.url || '');
+				if (!fromLibraryOffscreen || !['zincZoteroApiKey', 'zincTestZoteroApiBase'].includes(name) || (op !== 'get' && name !== 'zincZoteroApiKey')) {
+					sendResponse({ ok: false, error: 'refused' });
+					return false;
+				}
+				let done = op === 'get' ? chrome.storage.local.get(name).then(o => ({ ok: true, value: o[name] }))
+					: op === 'set' ? chrome.storage.local.set({ [name]: value }).then(() => ({ ok: true }))
+					: op === 'remove' ? chrome.storage.local.remove(name).then(() => ({ ok: true }))
+					: Promise.resolve({ ok: false, error: 'unknown op' });
+				done.then(sendResponse, e => sendResponse({ ok: false, error: e.message }));
+				return true;
+			}
 			return false;
 		});
 	}
