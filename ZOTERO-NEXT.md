@@ -51,6 +51,10 @@ reused for 5 s.
 | `scripts/build-win.ts`, `scripts/run-gulp-task.cjs` | **new**: Windows/Bun build (replaces `build.sh`, which needs rsync, perl, jq, rsvg-convert) |
 | `scripts/gen-key.ts`, `extension-key.txt`, `extension-id.txt` | **new**: pins the extension id so the host can allow-list it |
 | `test/native/transport.test.ts` | **new**: runs the real transport and `callMethod` against the compiled host |
+| `scripts/build-win.ts` step 6, `src/browserExt/background.js`, `manifest-v3.json` | **library page**: the build copies zotero-next's `gpui-ui/dist-extension` (`bun web/build.ts --target extension`) to `library/`. The toolbar button's right-click menu gets "Open Zinc library" (hidden when the build has no page). The extension-page CSP adds `'wasm-unsafe-eval'`. The page reads the library through the host's `api` method (zotero-next `connector-host/src/api.ts`, read-mostly for now). See zotero-next `docs/design/web-connector-wasm.md` section 6. |
+
+Build with the library page: `bun scripts/build-win.ts --library <zotero-next>/gpui-ui/dist-extension` (or set `ZINC_LIBRARY_DIST`;
+the default is `../zotero-next/gpui-ui/dist-extension`).
 
 Identity: the manifest `key` pins the id to `pakgagonakcalfbmckaolkpidcojacaf`, the icons are teal instead of red, and
 the name differs, so it sits next to the official Zotero Connector without clashing (install only one of them on

@@ -712,6 +712,8 @@ Zotero.Connector_Browser = new function() {
 		if (!browser.contextMenus.onClicked.hasListener(_handleContextMenuClick)) {
 			browser.contextMenus.onClicked.addListener(_handleContextMenuClick);
 		}
+		// zotero-next fork: the user's library in a tab (library/library.html), on every page, the browser's own included
+		_showLibraryContextMenuItem();
 
 		let isDisabled = _isDisabledForURL(url, true)
 		if (isDisabled) {
@@ -805,6 +807,9 @@ Zotero.Connector_Browser = new function() {
 		},
 		"zotero-context-menu-preferences": function () {
 			browser.tabs.create({url: browser.runtime.getURL('preferences/preferences.html')});
+		},
+		"zotero-context-menu-library": function () {
+			Zotero.Connector_Browser.openLibrary();
 		},
 		"zotero-context-menu-copy-unproxied-url": async (info, tab) => {
 			// navigator.clipboard.writeText doesn't work in the background page because it has no focus
@@ -1056,6 +1061,43 @@ Zotero.Connector_Browser = new function() {
 			contexts: ['tab']
 		});
 	}
+	/**
+	 * zotero-next fork: "Open Zinc library" on the toolbar button's menu. The page is the Zinc app built for the browser
+	 * (zotero-next: gpui-ui/web/build.ts --target extension, copied in by scripts/build-win.ts); its data comes from the
+	 * native host's "api" method. Not shown when the build has no page.
+	 */
+	function _showLibraryContextMenuItem() {
+		if (_libraryPage === false) return;
+		browser.contextMenus.create({
+			id: "zotero-context-menu-library",
+			title: "Open Zinc library",
+			contexts: buttonContext
+		});
+	}
+
+	// Probed once: a build without the page (nothing to copy from zotero-next) shows no menu item.
+	let _libraryPage = null;
+	(async () => {
+		try {
+			_libraryPage = (await fetch(browser.runtime.getURL('library/library.html'), { method: 'HEAD' })).ok;
+		}
+		catch (e) {
+			_libraryPage = false;
+		}
+	})();
+
+	/** Opens the library page, or brings an open one forward. */
+	this.openLibrary = async function () {
+		const url = browser.runtime.getURL('library/library.html');
+		const open = (await browser.tabs.query({})).find(t => (t.url || t.pendingUrl || '').startsWith(url));
+		if (open) {
+			await browser.tabs.update(open.id, { active: true });
+			await browser.windows.update(open.windowId, { focused: true });
+			return;
+		}
+		await browser.tabs.create({ url });
+	};
+
 	function _showPreferencesContextMenuItem() {
 		browser.contextMenus.create({
 			type: "separator",

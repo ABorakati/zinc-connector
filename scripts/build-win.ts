@@ -192,6 +192,19 @@ const manifest = JSON.parse(readFileSync(mf, "utf8"));
 delete manifest.applications;
 writeFileSync(mf, JSON.stringify(manifest, null, "\t"));
 
+// ---- 6. the library page (library/library.html): the Zinc app built for the browser, whose data comes from the native
+// host's "api" method. Built in zotero-next by `bun web/build.ts --target extension` (in gpui-ui); taken from --library <dir>,
+// else ZINC_LIBRARY_DIST, else ../zotero-next/gpui-ui/dist-extension. Without it the extension builds as before and the
+// toolbar menu has no "Open Zinc library" item.
+{
+	const li = args.indexOf("--library");
+	const from = resolve(li >= 0 ? args[li + 1]! : process.env.ZINC_LIBRARY_DIST ?? join(ROOT, "..", "zotero-next", "gpui-ui", "dist-extension"));
+	if (existsSync(join(from, "library.html"))) {
+		copyTree(from, join(OUT, "library"));
+		log(`library page: copied from ${from}`);
+	} else log(`library page: none at ${from} (build it in zotero-next/gpui-ui: bun web/build.ts --target extension)`);
+}
+
 const size = (() => {
 	let n = 0;
 	walk(OUT, (p) => (n += statSync(p).size));
