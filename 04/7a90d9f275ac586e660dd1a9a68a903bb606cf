@@ -1,0 +1,79 @@
+ZOTERO-NEXT.md
+  s_e8244edae027cb::t_4dbbfb5c5d64d6 55
+src/browserExt/background.js
+  s_e8244edae027cb::t_ba4cc8c68b79ce 1089-1090,1096,1099
+src/browserExt/background-worker.js
+  s_e8244edae027cb::t_4e4e1ee5975ddf 34-35
+src/browserExt/nativeHost.js
+  s_e8244edae027cb::t_0a5899db7c9922 36-38
+  s_e8244edae027cb::t_2db9d8f46a49a9 111
+  s_e8244edae027cb::t_4aba4ca171fa23 402-411
+src/browserExt/savePopup.js
+  s_e8244edae027cb::t_0603ee7392f6cd 1-363
+src/browserExt/manifest-v3.json
+  s_e8244edae027cb::t_1a77fe00313041 13-14
+src/browserExt/popup/popup.html
+  s_e8244edae027cb::t_9fac6a3a042131 1-62
+src/browserExt/popup/popup.css
+  s_e8244edae027cb::t_c86c5d1075fde4 1-173
+  s_e8244edae027cb::t_b30dfd80334d5d 174-178
+src/browserExt/popup/popup.js
+  s_e8244edae027cb::t_5fdaffbd3d9803 1-263
+  s_e8244edae027cb::t_4e588d62d724f6 264-265
+src/browserExt/popup/OFL-Inter.txt
+  s_e8244edae027cb::t_ed4b3dfd64c20b 1-93
+src/browserExt/popup/icons/LICENSE-lucide.txt
+  s_e8244edae027cb::t_e60c7ae04da773 1-43
+src/browserExt/popup/icons/app-window.svg
+  s_e8244edae027cb::t_3abc11247841f2 1-18
+src/browserExt/popup/icons/ban.svg
+  s_e8244edae027cb::t_62fad8c8c7a52e 1-16
+src/browserExt/popup/icons/book-open.svg
+  s_e8244edae027cb::t_f87fc0c495f4e6 1-16
+src/browserExt/popup/icons/book.svg
+  s_e8244edae027cb::t_e11c9828d78354 1-15
+src/browserExt/popup/icons/check.svg
+  s_e8244edae027cb::t_669780d0e6f834 1-15
+src/browserExt/popup/icons/chevron-down.svg
+  s_e8244edae027cb::t_89e05825d542bf 1-15
+src/browserExt/popup/icons/circle-alert.svg
+  s_e8244edae027cb::t_5b85dcf6cce4a1 1-17
+src/browserExt/popup/icons/file-text.svg
+  s_e8244edae027cb::t_c343b6e7883889 1-19
+src/browserExt/popup/icons/file.svg
+  s_e8244edae027cb::t_1ca518a044e067 1-16
+src/browserExt/popup/icons/folder.svg
+  s_e8244edae027cb::t_048d96de9a9fe3 1-15
+src/browserExt/popup/icons/globe.svg
+  s_e8244edae027cb::t_b06dbe2c5296c9 1-17
+src/browserExt/popup/icons/history.svg
+  s_e8244edae027cb::t_af736f2929b02a 1-17
+src/browserExt/popup/icons/library-big.svg
+  s_e8244edae027cb::t_4cfaba69666197 1-17
+src/browserExt/popup/icons/loader-circle.svg
+  s_e8244edae027cb::t_6215395db283d6 1-15
+src/browserExt/popup/icons/paperclip.svg
+  s_e8244edae027cb::t_383aa5b3f99e9c 1-15
+src/browserExt/popup/icons/search.svg
+  s_e8244edae027cb::t_de3e1e648ffbb0 1-16
+src/browserExt/popup/icons/trash-2.svg
+  s_e8244edae027cb::t_97575cfd86c087 1-19
+src/browserExt/popup/icons/x.svg
+  s_e8244edae027cb::t_d378b159ee54ed 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "047a90d9f275ac586e660dd1a9a68a903bb606cf",
+  "prompts": {},
+  "sessions": {
+    "s_e8244edae027cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1dc5ae7-c6db-4d3a-83d0-ba9036d23ba9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
