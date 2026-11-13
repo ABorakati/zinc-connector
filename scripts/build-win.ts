@@ -109,6 +109,17 @@ for (const f of toolbarSources) {
 log("Copying resources...");
 cpSync(join(ROOT, "COPYING"), join(OUT_EXT, "COPYING"));
 copyTree(join(SRC, "common"), OUT_EXT);
+// The update notice's public key (src/browserExt/updateKey.js, git-ignored): written fresh for every build. A build without one would
+// silently never show an update notice, so it fails here. ZN_ALLOW_NO_UPDATE_KEY=1 allows it, for a local build that does not need one.
+Bun.spawnSync([process.execPath, "scripts/gen-update-key.ts"], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
+{
+	const uk = join(SRC, "browserExt", "updateKey.js");
+	const key = existsSync(uk) ? /ZINC_UPDATE_PUBKEY = "([^"]*)"/.exec(readFileSync(uk, "utf8"))?.[1] : undefined;
+	if (!key && process.env.ZN_ALLOW_NO_UPDATE_KEY !== "1") {
+		console.error("build-win: no update public key. Save zotero-next's gpui-ui/update-pubkey.txt (checked out next to this repo as ../zotero-next), or set ZN_UPDATE_PUBKEY_FILE / ZN_UPDATE_PUBKEY (see scripts/gen-update-key.ts). For a local build without an update notice set ZN_ALLOW_NO_UPDATE_KEY=1.");
+		process.exit(1);
+	}
+}
 copyTree(join(SRC, "browserExt"), OUT_EXT); // build.sh excludes ui/tree (does not exist here)
 {
 	const zj = join(OUT_EXT, "zotero.js");
