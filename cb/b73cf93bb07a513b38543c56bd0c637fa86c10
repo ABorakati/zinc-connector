@@ -1,0 +1,33 @@
+scripts/gen-update-key.ts
+  s_e8244edae027cb::t_2471cf56d6540c 1-27
+src/browserExt/popup/popup.js
+  s_e8244edae027cb::t_68a226bfd878da 40-59,61
+src/browserExt/popup/popup.html
+  s_e8244edae027cb::t_48eef8b9b54be8 75-79
+test/native/updateNotice.test.ts
+  s_e8244edae027cb::t_9727d004804d7f 1-160
+src/browserExt/background-worker.js
+  s_e8244edae027cb::t_dba11cf8506e1d 35-36
+src/browserExt/popup/popup.css
+  s_e8244edae027cb::t_11abead2884c2f 198-203
+src/browserExt/updateNotice.js
+  s_e8244edae027cb::t_fa03345b6d09cd 1-205
+.gitignore
+  s_e8244edae027cb::t_2336dca43151e2 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cbb73cf93bb07a513b38543c56bd0c637fa86c10",
+  "prompts": {},
+  "sessions": {
+    "s_e8244edae027cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1dc5ae7-c6db-4d3a-83d0-ba9036d23ba9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
