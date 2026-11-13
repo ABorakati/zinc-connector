@@ -37,8 +37,28 @@
 		render();
 	});
 
+	// ---- update notice (unpacked installs only: updateNotice.js stores zincUpdateAvailable, nothing for store installs)
+	const UPDATE_KEY = 'zincUpdateAvailable';
+	/** "0.2.0+1a2b3c4d-20261201" -> "0.2.0 (2026-12-01)" */
+	const shownVersion = (v) => String(v).replace(/\+[0-9a-f]+-(\d{4})(\d{2})(\d{2})$/i, ' ($1-$2-$3)').replace(/\+[0-9a-f]+$/i, '');
+	function showUpdate(info) {
+		const ok = info && typeof info.version === 'string' && typeof info.url === 'string' && /^https:\/\//.test(info.url);
+		$('update').hidden = !ok;
+		if (!ok) return;
+		$('update-text').textContent = `Zinc ${shownVersion(info.version)} is available.`;
+		$('update-link').href = info.url;
+		$('update-link').title = info.url;
+	}
+	$('update-link').addEventListener('click', (e) => {
+		e.preventDefault();
+		const url = $('update-link').href;
+		if (/^https:\/\//.test(url)) chrome.tabs.create({ url });
+	});
+	chrome.storage.local.get(UPDATE_KEY).then((r) => showUpdate(r[UPDATE_KEY]));
+	chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes[UPDATE_KEY]) showUpdate(changes[UPDATE_KEY].newValue); });
+
 	// ---- helpers
-	const el = (tag, cls, text) => {
+	const el =(tag, cls, text) => {
 		const e = document.createElement(tag);
 		if (cls) e.className = cls;
 		if (text !== undefined) e.textContent = text;
