@@ -1,0 +1,43 @@
+scripts/build-win.ts
+  s_e8244edae027cb::t_8146d01b7a6577 112-122
+scripts/package.test.ts
+  s_e8244edae027cb::t_1043b374db49df 1-51
+scripts/package.ts
+  s_e8244edae027cb::t_410c834d61e768 2,4,9,13-18
+  s_e8244edae027cb::t_eaa7aee893011d 44,93,112,135,138-141
+  s_e8244edae027cb::t_e933b3521e460b 1
+  s_e8244edae027cb::t_194187d34eac17 3
+  s_e8244edae027cb::t_d126c1253b9b5b 5-8
+  s_e8244edae027cb::t_7be3425f0515df 10-12
+  s_e8244edae027cb::t_df109f9622dd38 19-21,41-43
+  s_e8244edae027cb::t_ccceb762f5c900 45-47,90-92
+  s_e8244edae027cb::t_d7c7d7ec34172d 94-96,109-111
+  s_e8244edae027cb::t_77a71221acb547 113-115,132-134
+  s_e8244edae027cb::t_4af49d55ec944d 136-137
+  s_e8244edae027cb::t_ac1dceb6cc932b 142-144
+  s_d288cb310e87c3::t_ca6d523073d039 22-40,48-89,97-108,116-131,145-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ade3ff52c06458786f5b6c292f22949d56fd71f3",
+  "prompts": {},
+  "sessions": {
+    "s_d288cb310e87c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a192e9c8ea3f0a078",
+        "model": "unknown"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    },
+    "s_e8244edae027cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1dc5ae7-c6db-4d3a-83d0-ba9036d23ba9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
