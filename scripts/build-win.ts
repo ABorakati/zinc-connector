@@ -111,7 +111,10 @@ cpSync(join(ROOT, "COPYING"), join(OUT_EXT, "COPYING"));
 copyTree(join(SRC, "common"), OUT_EXT);
 // The update notice's public key (src/browserExt/updateKey.js, git-ignored): written fresh for every build. A build without one would
 // silently never show an update notice, so it fails here. ZN_ALLOW_NO_UPDATE_KEY=1 allows it, for a local build that does not need one.
-Bun.spawnSync([process.execPath, "scripts/gen-update-key.ts"], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
+if (Bun.spawnSync([process.execPath, "scripts/gen-update-key.ts"], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] }).exitCode !== 0) {
+	console.error("build-win: scripts/gen-update-key.ts failed (a ZN_UPDATE_PUBKEY_FILE that does not exist, or a key that is not a base64 Ed25519 key)");
+	process.exit(1);
+}
 {
 	const uk = join(SRC, "browserExt", "updateKey.js");
 	const key = existsSync(uk) ? /ZINC_UPDATE_PUBKEY = "([^"]*)"/.exec(readFileSync(uk, "utf8"))?.[1] : undefined;

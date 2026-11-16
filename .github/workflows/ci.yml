@@ -64,6 +64,13 @@ jobs:
         working-directory: zotero-next
         run: bun core/scripts/fetch-zotero-vendor.ts
 
+      # The full-text engine is built in a separate repository (see Zinc's ci.yml): a placeholder lets the helper build resolve.
+      - name: Placeholder for the fulltext wasm
+        working-directory: zotero-next
+        run: |
+          mkdir -p core/vendor/fulltext-wasm
+          [ -s core/vendor/fulltext-wasm/fulltext.wasm ] || : > core/vendor/fulltext-wasm/fulltext.wasm
+
       - name: Build the Zinc helper
         working-directory: zotero-next/connector-host
         run: bun run build
