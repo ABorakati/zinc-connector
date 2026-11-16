@@ -77,4 +77,7 @@ jobs:
 
       - name: Native tests
         working-directory: zinc-connector
+        env:
+          # where the helper finds the bundled translators (core/vendor/zotero/translators); its default is ~/zotero-next
+          ZNH_REPO: ${{ github.workspace }}/zotero-next
         run: bun test test/native
