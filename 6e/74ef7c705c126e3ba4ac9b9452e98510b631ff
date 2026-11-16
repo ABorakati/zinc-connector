@@ -1,0 +1,59 @@
+.gitignore
+  s_cdf1f30595ed11::t_4a2154063eb2ba 7
+scripts/build-win.ts
+  s_cdf1f30595ed11::t_dff55f97c4055c 112-122
+scripts/gen-update-key.ts
+  s_cdf1f30595ed11::t_2ad2f75559246f 1-27
+scripts/package.test.ts
+  s_cdf1f30595ed11::t_bb6145882e34d4 1-51
+scripts/package.ts
+  s_cdf1f30595ed11::t_a235c531f427b0 1-166
+src/browserExt/background-worker.js
+  s_cdf1f30595ed11::t_fcbc386c83a580 35-36
+src/browserExt/background.js
+  s_cdf1f30595ed11::t_4ecd173710796b 1101-1107,1109-1111,1118-1121
+src/browserExt/background/offscreenManager.js
+  s_cdf1f30595ed11::t_74bffc2fe7ece6 43-44
+src/browserExt/manifest-v3.json
+  s_cdf1f30595ed11::t_c068d84b34c482 18-19,25-28
+src/browserExt/nativeHost.js
+  s_cdf1f30595ed11::t_2ce2e4ae30b460 32-48,71-88,90,93-100,140-142,144,149-159,162,164-169,175-178,181-182,186-190,193,201,244,252,259-260,263,272-273,275-276,279,283,288,312-316,318,322,332-333,372,376-379,383,386,392,396-397,401-420,425-608,618-624,626,630,635,648,652,654,662,665,667,674-676,678-745,747-867
+src/browserExt/offscreen/offscreen.js
+  s_cdf1f30595ed11::t_3a14727e4199c5 64-83
+src/browserExt/popup/icons/folder-input.svg
+  s_cdf1f30595ed11::t_e72a9d7d9998f9 1-17
+src/browserExt/popup/icons/rotate-cw.svg
+  s_cdf1f30595ed11::t_6f271c474f2182 1-16
+src/browserExt/popup/popup.css
+  s_cdf1f30595ed11::t_ae74ea8994e030 68-69,176-196,198-203
+src/browserExt/popup/popup.html
+  s_cdf1f30595ed11::t_2231912c30dd1f 17-38,75-79
+src/browserExt/popup/popup.js
+  s_cdf1f30595ed11::t_101b4bda07c43c 40-59,61,84,132,157-167,170-172,180,189-211,314-316
+src/browserExt/savePopup.js
+  s_cdf1f30595ed11::t_6ab9fff5178cfd 18-25,60-137,139-162,171,283,320,381,388,395-408,411-413,453,456-460
+src/browserExt/updateNotice.js
+  s_cdf1f30595ed11::t_1a1082b043c62b 1-205
+src/browserExt/zotero-api-key-rules.json
+  s_cdf1f30595ed11::t_8ae2a10460dcd8 1-16
+test/native/browserTarget.test.ts
+  s_cdf1f30595ed11::t_95b22989e2dc8c 1-532
+test/native/updateNotice.test.ts
+  s_cdf1f30595ed11::t_c56886772933a6 1-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e74ef7c705c126e3ba4ac9b9452e98510b631ff",
+  "prompts": {},
+  "sessions": {
+    "s_cdf1f30595ed11": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0719cea7-1eb3-4344-a1e4-a862c3bde6eb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "ABorakati <ABorakati@users.noreply.github.com>"
+    }
+  }
+}
