@@ -15,6 +15,14 @@
 	  Cancel / Remove         cancelSession / trashSession: the session's own items go to the Trash (never deleted)
 	  Open in Zinc / item     revealInApp {key, open}
 	  Open library            the library page (library/library.html) with the item selected
+
+	One library per computer: a save goes to the Zinc app when it is installed, else to the library in this browser
+	(Zotero.NativeHost.refreshTarget; no stored choice, no way to pick). The state carries `library` ("app" | "browser",
+	where this save goes) so the popup can say so as a read-only label, and `hostDown` / `hostError` (the app is installed but
+	its host fails): the save fails with the host's message and the popup offers Try again (cmd retry). Nothing goes to the
+	browser library then.
+	`move` (one object shared by all popups): when the app is installed and the browser library holds items, the popup offers
+	"Move your browser library into Zinc" (cmd moveLibrary); it shows progress and then "Moved N items into Zinc".
 */
 
 Zotero.SavePopup = new function () {
@@ -49,7 +57,109 @@ Zotero.SavePopup = new function () {
 			busy: null, // 'cancel' | 'remove' | 'target' while a host call runs
 			message: null, // last action's result for the popup's status line
 			seenDone: false,
+			library: 'app', // where this save goes: 'app' | 'browser'
+			hostDown: false, // the app is installed and its host fails
+			hostError: null, // the host's message then
 		};
+	}
+
+	/** The move of the browser library into the app, as every popup shows it. */
+	const move = { offer: false, items: 0, busy: false, phase: null, text: '', result: null, error: null };
+
+	function pushAll() {
+		for (const t of new Set(ports.values())) push(t);
+	}
+
+	/** Is there a browser library to move into the app? (asked when a popup opens) */
+	async function checkMove() {
+		if (move.busy) return;
+		// the result of an earlier move is shown for a minute, then the box goes
+		if (move.result && Date.now() - move.doneAt > 60000) Object.assign(move, { result: null, error: null });
+		try {
+			const r = await Zotero.NativeHost.browserLibraryState();
+			move.offer = !!r.offer && !move.result;
+			move.items = r.items || 0;
+		}
+		catch (e) {
+			Zotero.debug(`SavePopup: move check failed: ${e.message}`);
+		}
+		pushAll();
+	}
+
+	async function moveLibrary() {
+		if (move.busy) return;
+		Object.assign(move, { busy: true, phase: 'export', text: 'Starting', result: null, error: null });
+		pushAll();
+		try {
+			const r = await Zotero.NativeHost.moveBrowserLibrary(p => {
+				move.phase = p.phase;
+				move.text = p.text;
+				pushAll();
+			});
+			move.result = r;
+			move.doneAt = Date.now();
+			move.offer = false;
+		}
+		catch (e) {
+			move.error = e.message;
+		}
+		finally {
+			move.busy = false;
+			pushAll();
+		}
+	}
+
+	/**
+	 * Looks up where the save goes (the host decides: app installed -> the app, else this browser), and whether the app's
+	 * host fails. Also asks whether there is a browser library to move.
+	 */
+	async function checkLibrary(s) {
+		try {
+			const t = await Zotero.NativeHost.refreshTarget();
+			s.library = t.target;
+			s.hostError = t.hostError;
+			s.hostDown = t.target == 'app' && !!t.hostError;
+			push(s.tabId);
+			if (t.target == 'app' && !t.hostError) checkMove();
+		}
+		catch (e) {
+			Zotero.debug(`SavePopup: save target check failed: ${e.message}`);
+		}
+		push(s.tabId);
+	}
+
+	/** Starts a save in the tab: what a click on the toolbar button does. */
+	async function startSave(tab, fresh) {
+		const nothingNow = () => {
+			if (states.get(tab.id) !== fresh || !fresh.starting) return;
+			fresh.starting = false;
+			fresh.nothing = true;
+			push(tab.id);
+		};
+		// a page the connector never saves from (a new tab, a browser or extension page, a file): say so now, not after the wait
+		if (Zotero.Connector_Browser.isDisabledForURL(tab.url || tab.pendingUrl || '')) {
+			nothingNow();
+			return;
+		}
+		let started = true;
+		try {
+			started = (await Zotero.Connector_Browser.onZoteroButtonElementClick(tab)) !== false;
+		}
+		catch (e) {
+			fresh.errors.push(e.message);
+		}
+		// the save stopped before it reached the page (no access to the site, the scripts could not load)
+		if (!started) {
+			nothingNow();
+			return;
+		}
+		setTimeout(() => {
+			if (states.get(tab.id) === fresh && fresh.starting) {
+				fresh.starting = false;
+				fresh.nothing = true;
+				push(tab.id);
+			}
+		}, NOTHING_AFTER_MS);
 	}
 
 	function push(tabId) {
@@ -58,7 +168,7 @@ Zotero.SavePopup = new function () {
 		for (const [port, t] of ports) {
 			if (t !== tabId) continue;
 			try {
-				port.postMessage({ type: 'state', state: s });
+				port.postMessage({ type: 'state', state: { ...s, move } });
 				if (s.done || s.nothing) s.seenDone = true;
 			}
 			catch (e) {
@@ -170,6 +280,7 @@ Zotero.SavePopup = new function () {
 					// a Cancel pressed while the popup was still waiting for the page
 					if (prev && !prev.sessionID && prev.cancelled) s.cancelled = true;
 					states.set(tabId, s);
+					checkLibrary(s);
 					s.owned = await claim(tab);
 					loadTargets(s);
 					if (s.cancelled) cancelOnHost(s);
@@ -206,6 +317,7 @@ Zotero.SavePopup = new function () {
 				if (!s) return false;
 				const rv = Array.isArray(args) ? args : [args];
 				s.done = { ok: !!rv[0], error: rv[0] ? null : (rv[1] || 'translationError') };
+				if (!rv[0] && s.library == 'app') checkLibrary(s);
 				refreshSaved(s);
 				break;
 			}
@@ -266,50 +378,39 @@ Zotero.SavePopup = new function () {
 				if (cur && !cur.nothing && (msg.save === false || !cur.done || !cur.seenDone)) {
 					cur.owned = true;
 					push(tab.id);
+					checkMove();
 					return;
 				}
 				const fresh = newState(tab.id, null);
 				fresh.owned = true;
 				states.set(tab.id, fresh);
 				push(tab.id);
+				checkLibrary(fresh);
 				if (msg.save === false) {
 					fresh.starting = false;
 					fresh.nothing = true;
 					push(tab.id);
 					return;
 				}
-				const nothingNow = () => {
-					if (states.get(tab.id) !== fresh || !fresh.starting) return;
-					fresh.starting = false;
-					fresh.nothing = true;
-					push(tab.id);
-				};
-				// a page the connector never saves from (a new tab, a browser or extension page, a file): say so now, not after the wait
-				if (Zotero.Connector_Browser.isDisabledForURL(tab.url || tab.pendingUrl || '')) {
-					nothingNow();
-					return;
-				}
-				let started = true;
-				try {
-					started = (await Zotero.Connector_Browser.onZoteroButtonElementClick(tab)) !== false;
-				}
-				catch (e) {
-					fresh.errors.push(e.message);
-				}
-				// the save stopped before it reached the page (no access to the site, the scripts could not load)
-				if (!started) {
-					nothingNow();
-					return;
-				}
-				setTimeout(() => {
-					if (states.get(tab.id) === fresh && fresh.starting) {
-						fresh.starting = false;
-						fresh.nothing = true;
-						push(tab.id);
-					}
-				}, NOTHING_AFTER_MS);
+				await startSave(tab, fresh);
 				return;
 			}
+			case 'retry': {
+				// "Try again" after the app's host failed: the target is looked up again (the app may have been
+				// uninstalled meanwhile) and the save starts over
+				const tab = await tabFor(tabId);
+				if (!tab) return;
+				const fresh = newState(tab.id, null);
+				fresh.owned = true;
+				states.set(tab.id, fresh);
+				push(tab.id);
+				checkLibrary(fresh);
+				await startSave(tab, fresh);
+				return;
+			}
+			case 'moveLibrary':
+				await moveLibrary();
+				return;
 			case 'setTarget': {
 				if (!s) return;
 				const t = s.targets.find(x => x.id === msg.id);
@@ -349,9 +450,14 @@ Zotero.SavePopup = new function () {
 				return;
 			}
 			case 'openLibrary':
-				await Zotero.Connector_Browser.openLibrary(msg.key);
+				await Zotero.Connector_Browser.openLibrary(msg.key, s ? { browser: s.library == 'browser' } : {});
 				return;
 			case 'openInZinc': {
+				if (s && s.library == 'browser') {
+					// there is no app to show it in
+					port.postMessage({ type: 'result', ok: false, error: 'This item is in the library in this browser.' });
+					return;
+				}
 				try {
 					const r = await host('revealInApp', { key: msg.key, open: !!msg.open });
 					port.postMessage({ type: 'result', ok: true, started: !!(r && r.started), opened: r && r.opened });

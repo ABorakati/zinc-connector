@@ -1098,16 +1098,27 @@ Zotero.Connector_Browser = new function() {
 	})();
 
 	/** Opens the library page, or brings an open one forward; `key` selects that item (the save popup's "Open library"). */
-	this.openLibrary = async function (key) {
+	this.openLibrary = async function (key, options = {}) {
+		// One library per computer: the Zinc app's, through the native host (no mode), when the app is installed; else this
+		// browser's own (library/library.html?mode=browser). options.browser forces one (the popup shows the library its
+		// save went to). The target is looked up again each time, so installing the app switches the library tab over.
+		const browserMode = typeof options.browser == 'boolean'
+			? options.browser
+			: (await Zotero.NativeHost.refreshTarget().catch(() => ({ target: 'app' }))).target == 'browser';
 		const url = browser.runtime.getURL('library/library.html');
-		const open = (await browser.tabs.query({})).find(t => (t.url || t.pendingUrl || '').startsWith(url));
+		const isBrowserTab = t => /[?&]mode=browser(&|#|$)/.test(t.url || t.pendingUrl || '');
+		const open = (await browser.tabs.query({})).find(t => (t.url || t.pendingUrl || '').startsWith(url)
+			&& isBrowserTab(t) == browserMode);
 		if (open) {
 			await browser.tabs.update(open.id, { active: true });
 			await browser.windows.update(open.windowId, { focused: true });
 			if (key) browser.runtime.sendMessage({ zincLibrarySelect: key }).catch(() => {});
 			return;
 		}
-		await browser.tabs.create({ url: key ? `${url}?select=${encodeURIComponent(key)}` : url });
+		const params = [];
+		if (browserMode) params.push('mode=browser');
+		if (key) params.push(`select=${encodeURIComponent(key)}`);
+		await browser.tabs.create({ url: params.length ? `${url}?${params.join('&')}` : url });
 	};
 
 	function _showPreferencesContextMenuItem() {

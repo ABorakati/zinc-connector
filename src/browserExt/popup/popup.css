@@ -65,6 +65,8 @@ button { font: inherit; color: inherit; }
 .i-book { --icon: url(icons/book.svg); }
 .i-globe { --icon: url(icons/globe.svg); }
 .i-paperclip { --icon: url(icons/paperclip.svg); }
+.i-rotate-cw { --icon: url(icons/rotate-cw.svg); }
+.i-folder-input { --icon: url(icons/folder-input.svg); }
 .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -171,7 +173,34 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .search input:focus-visible { outline: none; }
 .chooser:focus-within { border-color: var(--primary-line); }
 
+/* where saves go (Zinc app / this browser) */
+.target { position: relative; display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; font-size: 12px; color: var(--muted-foreground); }
+.target strong { font-weight: 600; color: var(--foreground); }
+.target-text { min-width: 0; }
+.host-down { display: flex; gap: 10px; margin: 0 12px 8px; padding: 10px 12px; border-radius: var(--r-lg); background: var(--danger-soft); }
+.host-down > .i { margin-top: 1px; color: var(--danger); }
+.host-down-text { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.host-down-message { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.host-down-message:empty { display: none; }
+
+/* the browser library can be moved into the app */
+.move { display: flex; gap: 10px; margin: 0 12px 8px; padding: 10px 12px; border-radius: var(--r-lg); background: var(--primary-soft); border: 1px solid var(--primary-line); }
+.move > .i { margin-top: 1px; color: var(--primary); }
+.move-text { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.move-head { font-weight: 600; }
+.move-sub { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.move-sub:empty { display: none; }
+.move.error { background: var(--danger-soft); border-color: transparent; }
+.move.error > .i { color: var(--danger); }
+.move.done > .i { color: var(--success); }
+
 /* footer */
+/* update notice: only for unpacked installs */
+.update { margin: 8px 12px 0; padding: 8px 12px; border-radius: var(--r-lg); background: var(--primary-soft); border: 1px solid var(--primary-line); }
+.update-line { font-weight: 600; }
+.update-note { margin-top: 2px; font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.link:hover { filter: brightness(1.1); }
 .foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 12px 10px; border-top: 1px solid var(--border-soft); min-height: 46px; }
 .message { font-size: 12px; color: var(--muted-foreground); min-width: 0; }
 .message.error { color: var(--danger); }

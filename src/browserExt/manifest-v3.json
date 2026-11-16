@@ -15,12 +15,17 @@
 	},
 	"host_permissions": ["http://127.0.0.1/*", "https://repo.zotero.org/*", "https://api.zotero.org/*", "http://*/*", "https://*/*"],
 	"permissions": ["tabs", "contextMenus", "cookies", "scripting", "offscreen",
-		"webRequest", "declarativeNetRequest", "webNavigation", "storage", "nativeMessaging"],
+		"webRequest", "declarativeNetRequest", "webNavigation", "storage", "nativeMessaging",
+		"unlimitedStorage"],
 	"declarative_net_request": {
 		"rule_resources": [{
 			"id": "styleIntercept",
 			"enabled": true,
 			"path": "styleInterceptRules.json"
+		}, {
+			"id": "zoteroApiKey",
+			"enabled": true,
+			"path": "zotero-api-key-rules.json"
 		}]
 	},
 	"optional_permissions": ["management", "clipboardWrite"],

@@ -61,6 +61,26 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', () => init());
 
+/*
+ * zotero-next fork: the browser library. Chrome allows one offscreen document per extension, and this is it, so the
+ * library database (library/offscreen.html: starts the DB worker, answers ports named "zinc-db") runs in a frame of
+ * this page. The background asks for the frame with {zincAttachDb: true} (nativeHost.js ensureBrowserLibrary, on every
+ * save and for the library tab); it is not removed again (an idle database costs nothing).
+ * An offscreen document has no chrome.storage (only chrome.runtime), so this page cannot read the save target itself.
+ */
+function attachLibraryFrame() {
+	if (document.getElementById('zinc-db-frame')) return;
+	const frame = document.createElement('iframe');
+	frame.id = 'zinc-db-frame';
+	frame.src = chrome.runtime.getURL('library/offscreen.html');
+	frame.hidden = true;
+	document.body.append(frame);
+}
+chrome.runtime.onMessage.addListener((msg) => {
+	if (msg && msg.zincAttachDb === true) attachLibraryFrame();
+	return false;
+});
+
 navigator.serviceWorker.onmessage = async (e) => {
 	if (e.data !== 'service-worker-restarted') return;
 	console.log('Offscreen: owner service worker restarted. reinitializing messaging');
