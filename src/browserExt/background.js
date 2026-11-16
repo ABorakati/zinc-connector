@@ -334,6 +334,10 @@ Zotero.Connector_Browser = new function() {
 	this.onZoteroButtonElementClick = function(tab) {
 		return _browserAction(tab);
 	}
+	/** zotero-next fork: whether the connector never saves from this URL (a browser or extension page, a file), for the save popup */
+	this.isDisabledForURL = function (url) {
+		return !!_isDisabledForURL(url, true);
+	}
 	
 	/**
 	 * Called if Zotero version is determined to be incompatible with Standalone
@@ -830,11 +834,18 @@ Zotero.Connector_Browser = new function() {
 	
 	async function _handleContextMenuClick(info, tab) {
 		const id = info.menuItemId;
+		// zotero-next fork: opening the library does not touch the page, so it skips the page's permission and script checks
+		// below (they stop on a new tab, a browser page or a site without access, and the click did nothing)
+		if (id === "zotero-context-menu-library") {
+			return Zotero.Connector_Browser.openLibrary();
+		}
 		if (id.startsWith("zotero-context-menu-copy-unproxied")) {
 			// Request permissions before other async actions otherwise
 			// it's not treated like we do it within a gesture
 			await browser.permissions.request({permissions: ['clipboardWrite']});
 		}
+		// the listener is registered when the worker starts (below), so a click can arrive before init has finished
+		await Zotero.initDeferred.promise;
 		const shouldContinue = await Zotero.HostPermissions.checkChromiumActionPermissions(tab);
 		if (!shouldContinue) {
 			return;
@@ -1208,13 +1219,14 @@ Zotero.Connector_Browser = new function() {
 		return true;
 	}
 
+	// zotero-next fork: false when the save stops before it reaches the page (the save popup then says so at once)
 	async function _browserAction(tab) {
 		const shouldContinue = await Zotero.HostPermissions.checkChromiumActionPermissions(tab);
 		if (!shouldContinue) {
-			return;
+			return false;
 		}
 		if (!await _ensureScriptsInjected(tab)) {
-			return;
+			return false;
 		}
 
 		let tabInfo = Zotero.Connector_Browser.getTabInfo(tab.id);
@@ -1387,6 +1399,12 @@ Zotero.Connector_Browser = new function() {
 	}
 
 	browser.action.onClicked.addListener(waitForInit(logListenerErrors(_browserAction)));
+	// zotero-next fork: registered when the worker starts, not only in _updateExtensionUI. Chrome keeps the menu items
+	// while the service worker sleeps; a click on one wakes the worker, and the click is lost unless a listener is
+	// added in this first run.
+	if (!browser.contextMenus.onClicked.hasListener(_handleContextMenuClick)) {
+		browser.contextMenus.onClicked.addListener(_handleContextMenuClick);
+	}
 	
 	browser.tabs.onRemoved.addListener(waitForInit(logListenerErrors(_clearInfoForTab)));
 	

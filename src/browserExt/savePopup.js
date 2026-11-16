@@ -130,11 +130,28 @@ Zotero.SavePopup = new function () {
 
 	/** Starts a save in the tab: what a click on the toolbar button does. */
 	async function startSave(tab, fresh) {
+		const nothingNow = () => {
+			if (states.get(tab.id) !== fresh || !fresh.starting) return;
+			fresh.starting = false;
+			fresh.nothing = true;
+			push(tab.id);
+		};
+		// a page the connector never saves from (a new tab, a browser or extension page, a file): say so now, not after the wait
+		if (Zotero.Connector_Browser.isDisabledForURL(tab.url || tab.pendingUrl || '')) {
+			nothingNow();
+			return;
+		}
+		let started = true;
 		try {
-			await Zotero.Connector_Browser.onZoteroButtonElementClick(tab);
+			started = (await Zotero.Connector_Browser.onZoteroButtonElementClick(tab)) !== false;
 		}
 		catch (e) {
 			fresh.errors.push(e.message);
+		}
+		// the save stopped before it reached the page (no access to the site, the scripts could not load)
+		if (!started) {
+			nothingNow();
+			return;
 		}
 		setTimeout(() => {
 			if (states.get(tab.id) === fresh && fresh.starting) {
