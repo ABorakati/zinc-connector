@@ -1,40 +1,73 @@
 name: CI
 
-on: [push, pull_request]
+# zotero-next fork. Upstream's job (npm ci, build.sh, the mocha tests in a browser) does not fit this fork: it installs with Bun
+# (bun.lock; package-lock.json is upstream's and out of date) and saves through the Zinc helper. This job runs the fork's own tests
+# (test/native) against a helper built from ABorakati/zinc, checked out next to this repository as ../zotero-next.
+# The full extension build (the library page packed in) runs in ABorakati/zinc's .github/workflows/extension.yml.
+on:
+  push:
+    branches: [zotero-next]
+  pull_request:
+    branches: [zotero-next]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.4
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository and submodules
+      - name: Check out the connector
         uses: actions/checkout@v5
         with:
           submodules: true
+          path: zinc-connector
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+      - name: Check out Zinc
+        uses: actions/checkout@v5
         with:
-          node-version: '20' # Specify your desired Node.js version
-          cache: npm
+          repository: ABorakati/zinc
+          ref: main
+          path: zotero-next
 
-      - name: Install rsvg-convert
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends librsvg2-bin
+          (cd zotero-next/core && bun install --frozen-lockfile)
+          (cd zinc-connector && bun install --frozen-lockfile)
 
-      - name: Install npm dependencies
-        run: npm ci
+      # core/vendor is git-ignored; the same pinned download as Zinc's own workflows.
+      - name: Cache vendored Zotero translation code
+        id: vendor
+        uses: actions/cache@v4
+        with:
+          path: zotero-next/core/vendor/zotero
+          key: zotero-vendor-${{ hashFiles('zotero-next/core/scripts/fetch-zotero-vendor.ts') }}
+      - name: Fetch vendored Zotero translation code
+        if: steps.vendor.outputs.cache-hit != 'true'
+        working-directory: zotero-next
+        run: bun core/scripts/fetch-zotero-vendor.ts
 
-      - name: Run build script
-        run: bash build.sh -p b -d
+      - name: Build the Zinc helper
+        working-directory: zotero-next/connector-host
+        run: bun run build
 
-      - name: Show build log on failure
-        if: ${{ failure() }}
-        run: cat build.log
-
-      - name: Disable AppArmor for puppeteer
-        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-
-      - name: Run tests
-        run: bash scripts/runtests.sh -i -f 
+      - name: Native tests
+        working-directory: zinc-connector
+        run: bun test test/native
