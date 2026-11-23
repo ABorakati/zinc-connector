@@ -14,6 +14,9 @@ describe("versionFromTag", () => {
 		expect(versionFromTag("v0.2.0-rc1")).toEqual({ numeric: "0.2.0.1", name: "0.2.0-rc1" });
 		expect(versionFromTag("v0.2.0-alpha")).toEqual({ numeric: "0.2.0.1", name: "0.2.0-alpha" });
 	});
+	test("a fix release: four integers, same text both ways", () => {
+		expect(versionFromTag("v0.2.7.1")).toEqual({ numeric: "0.2.7.1", name: "0.2.7.1" });
+	});
 	test("numeric is always 1 to 4 integers of 0-65535", () => {
 		for (const t of ["v0.0.1", "v9.9.9-beta.3", "v65535.0.0", "v1.2.3-x.y.7"]) {
 			expect(versionFromTag(t).numeric).toMatch(/^\d+(\.\d+){0,3}$/);
@@ -21,7 +24,7 @@ describe("versionFromTag", () => {
 		}
 	});
 	test("refuses what is not a version, and numbers Chrome would refuse", () => {
-		for (const t of ["", "latest", "v1", "v1.2", "v1.2.3.4", "v1.2.3-", "vx.y.z"]) expect(() => versionFromTag(t)).toThrow();
+		for (const t of ["", "latest", "v1", "v1.2", "v1.2.3.4.5", "v1.2.3.4-beta.1", "v1.2.3-", "vx.y.z"]) expect(() => versionFromTag(t)).toThrow();
 		expect(() => versionFromTag("v65536.0.0")).toThrow();
 		expect(() => versionFromTag("v1.0.0-beta.70000")).toThrow();
 	});

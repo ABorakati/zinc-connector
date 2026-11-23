@@ -30,13 +30,22 @@ const opt = (name: string) => {
 	return i >= 0 ? args[i + 1] : undefined;
 };
 
-/** v0.2.0 -> { numeric: "0.2.0", name: "0.2.0" }; v0.2.0-beta.1 -> { numeric: "0.2.0.1", name: "0.2.0-beta.1" } */
+/**
+ * v0.2.0 -> { numeric: "0.2.0", name: "0.2.0" }; v0.2.0-beta.1 -> { numeric: "0.2.0.1", name: "0.2.0-beta.1" };
+ * a fix release v0.2.7.1 -> { numeric: "0.2.7.1", name: "0.2.7.1" } (it cannot also be a pre-release: Chrome allows four numbers)
+ */
 export function versionFromTag(tag: string): { numeric: string; name: string } {
-	const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(tag.trim());
-	if (!m) throw new Error(`not a version tag: "${tag}" (expected v1.2.3 or v1.2.3-beta.1)`);
-	const [, a, b, c, pre] = m;
+	const m = /^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(tag.trim());
+	if (!m || (m[4] !== undefined && m[5] !== undefined))
+		throw new Error(`not a version tag: "${tag}" (expected v1.2.3, v1.2.3.4 or v1.2.3-beta.1)`);
+	const [, a, b, c, fix, pre] = m;
 	const nums = [a, b, c].map(Number);
+	if (fix !== undefined) nums.push(Number(fix));
 	let numeric = nums.join(".");
+	if (fix !== undefined) {
+		if (nums.some((n) => n > 65535)) throw new Error(`a version part is over 65535: ${numeric}`);
+		return { numeric, name: numeric };
+	}
 	if (pre) {
 		const tail = /(\d+)(?!.*\d)/.exec(pre); // the last number of the pre-release: beta.2 -> 2, rc1 -> 1
 		nums.push(tail ? Number(tail[1]) : 1);
